@@ -156,6 +156,7 @@ test('invalid state directory errors identify the path and configuration remedie
   expect(error.message).toContain('SDS_STATE_DIR')
 })
 
+// This scenario starts 15 CLI processes; allow for slower CI startup and filesystem I/O.
 test('CLI creates nested tasks, lists descendants and moves branches with revision checks', async () => {
   await success(['init']); const rootTask = await create()
   const child = await success<Created>(['task', 'create', 'Child', '--parent', rootTask.ref])
@@ -173,4 +174,4 @@ test('CLI creates nested tasks, lists descendants and moves branches with revisi
   for (const args of [['task', 'move', child.ref, '--revision', '3'], ['task', 'list', '--roots', '--parent', rootTask.ref], ['task', 'list', '--recursive']]) {
     const result = await command(args); expect(result.code).toBe(2); expect(result.stdout).toBe('')
   }
-})
+}, 30_000)
