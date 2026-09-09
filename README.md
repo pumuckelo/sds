@@ -1,248 +1,129 @@
 # SDS
 
-Local, repository-owned task management for agents and humans. Use the **CLI** to track work from any shell-based agent, and the optional web dashboard to browse and edit it. Tasks live in `.agent-work/` alongside your code; no hosted service is needed.
+Local task management for agents and humans. Track work through the CLI or web dashboard, with tasks stored in `.agent-work/` alongside your code.
 
 ## Install
 
-Download prebuilt executables for macOS or Linux (Apple Silicon/ARM64 and x64):
+For macOS and Linux, on ARM64 or x64:
 
 ```sh
 curl -fsSL https://github.com/pumuckelo/sds/releases/latest/download/install.sh | sh
 ```
 
-This requires a published GitHub Release; the first release becomes available after the release workflow is pushed and a version tag is published. The installer verifies the archive checksum and installs into `~/.local/share/sds` with commands in `~/.local/bin`. Add that directory to your PATH. No Bun or Node is required to run the prebuilt executables.
+Add `~/.local/bin` to your PATH. Run the same command to upgrade.
 
-Run the same command to upgrade. Use `INSTALL_VERSION=vX.Y.Z`, `INSTALL_ROOT`, or `INSTALL_BIN_DIR` on the installer process to select a version or location. The installer does not edit shell profiles or repository instructions.
+## Quick start
 
-### Agent setup
+From the repository you want to track:
 
-The bundled [usage skill](skills/sds/SKILL.md) has a separate [setup reference](skills/sds/references/setup.md). Install the skill in your agent's supported skill directory, then ask it to install and use SDS in your project. Setup guidance covers installation and adding a short note to the project's `AGENTS.md` and `CLAUDE.md` when adopting the tool. Normal usage does not load the setup reference.
+```sh
+sds init
+sds task create "Implement reset"
+sds task list
+sds task get TASK
+```
 
-For agent-led setup, give your agent the [setup reference](https://github.com/pumuckelo/sds/blob/main/skills/sds/references/setup.md) and ask it to install and use the tool in your repository. It can install the bundled usage skill as part of that setup.
+To open the dashboard:
 
-### Build from source
+```sh
+sds-dashboard
+```
+
+Visit [localhost:4317](http://127.0.0.1:4317/) to manage tasks, subtasks, dependencies, checklists and notes in a Kanban board or hierarchy. The CLI works without the dashboard running.
+
+### Use with an agent
+
+Give your agent the [setup instructions](skills/sds/references/setup.md) and ask it to install and use SDS in your repository. They cover installing the [SDS skill](skills/sds/SKILL.md) and adding project instructions so the agent uses it for future work.
+
+## Working with tasks
+
+```sh
+sds todo add TASK "Endpoint" "Tests" --revision 1
+sds todo complete TASK TODO1 TODO2 --revision 2
+sds task stage TASK reviewing --revision 3
+sds note add TASK "Verified token expiry" --revision 4
+```
+
+Use the latest revision returned by SDS. If another writer changed the task, reread it before retrying. IDs accept unambiguous prefixes of at least four characters.
+
+### Subtasks and dependencies
+
+Use todos for small steps and subtasks for work needing its own status or notes. Subtasks can nest recursively; two levels usually suffice.
+
+```sh
+sds task create "Implement backend" --parent TASK
+sds task list --parent TASK --recursive
+sds task move CHILD --parent TASK --revision 1
+sds task move CHILD --root --revision 2
+```
+
+Link prerequisites in the dashboard or CLI:
+
+```sh
+sds task update TASK --revision N --json '{"operations":[{"type":"dependencies.set","dependencyIds":["OTHER_TASK"]}]}'
+```
+
+Parent, child and prerequisite statuses remain independent. Completing one does not automatically complete another.
+
+### JSON and command discovery
+
+Commands return JSON and accept complex input through `--json` or `--stdin`:
+
+```sh
+sds task create --json '{"title":"Reset flow","todos":[{"title":"Endpoint"},{"title":"Tests"}]}'
+sds task get-many TASK1 TASK2
+sds --help
+sds schema update
+sds schema update-many
+```
+
+Use `--verbose` for expanded mutation receipts. Multi-task updates report individual outcomes; they are not a single transaction.
+
+## Projects and storage
+
+The CLI finds the current project from your working directory. Use `--project /path/to/checkout` to select another.
+
+Tasks live in `.agent-work/tasks/`, with project identity in `.agent-work/project.json`. Commit this directory to version tasks with your code. Commit the project identity before creating Git worktrees so they inherit it. Each checkout has its own task versions; concurrent edits across branches may need Git conflict resolution.
+
+Machine-local registrations and locks live separately in `~/.local/state/sds`.
+
+| Setting | Purpose |
+| --- | --- |
+| `SDS_PORT` | Dashboard port; default `4317`. |
+| `SDS_STATE_DIR` | Registry and locks directory. Use the same value for CLI and dashboard. |
+| `SDS_PROJECT` | Checkout to register at server startup. |
+
+The dashboard is intended for local use and binds to loopback.
+
+## Optional MCP
+
+Start `sds-dashboard`, then connect your MCP client to `http://127.0.0.1:4317/mcp` using Streamable HTTP. It exposes the same task operations, with tool schemas available through the client.
+
+## Contributing / Development
 
 Requires Bun. From this repository:
 
 ```sh
 bun install --frozen-lockfile
 bun link
-```
-
-## Use the CLI
-
-From the project you want to track (not the SDS source directory):
-
-```sh
-sds init                            # initialize/register the current folder
-sds task create "Implement reset"
-sds task list
-sds task get TASK
-sds todo add TASK "Endpoint" "Tests" --revision 1
-sds todo complete TASK TODO1 TODO2 --revision 2
-sds task stage TASK reviewing --revision 3
-sds task status TASK blocked --reason "Waiting for credentials" --revision 4
-sds note add TASK "Verified token expiry" --revision 5
-```
-
-Complex payloads use inline JSON or stdin. There is no file-input option.
-
-```sh
-sds task create --json '{"title":"Reset flow","todos":[{"title":"Endpoint"},{"title":"Tests"}]}'
-sds task update TASK --revision 6 --stdin <<'JSON'
-{"operations":[{"type":"finding.add","severity":"high","description":"Token can be reused","file":"src/reset.ts","line":12}]}
-JSON
-```
-
-`task update` also accepts `--json '{"operations":[...]}'`. Supply `--revision` or `expectedRevision` inside the JSON. Both must agree if supplied together. Read `sds schema update`, `sds schema create`, or `sds schema operation` for payload definitions; use `--help` for command flags.
-
-The CLI reads and writes local tasks directly through the shared core, without requiring a running server. It resolves the nearest `.agent-work/project.json` from the current directory, stopping at Git boundaries. Use `--project /path/to/checkout` to select another checkout. Existing project metadata is automatically registered on this machine; new projects require `sds init`.
-
-Use the same `SDS_STATE_DIR` (or `--state-dir`) as the server so registry and locks are shared. Task mutations appear through the dashboard's file watcher. CLI activity is not a live heartbeat: heartbeat reporting is available through the optional server interface.
-
-Successful commands emit compact JSON to stdout. Failures emit `{ "error": { "code", "message" } }` to stderr with exit 1, or exit 2 for invalid input. Help is plain text. On a revision conflict, reread and reconcile before retrying.
-
-For automatic workflow guidance, add to the target repository's `AGENTS.md`:
-
-```md
-Track development work in SDS. Read the sds skill before using it.
-```
-
-## Dashboard
-
-With the prebuilt installation, run `sds-dashboard` from any directory. For a source checkout, run `bun run build` and `bun run serve` from this repository.
-
-Open [SDS](http://127.0.0.1:4317/) and register an existing local project folder. Registration initializes `.agent-work/project.json` and `.agent-work/tasks/`. The dashboard supports tasks, recursive subtasks, linked dependencies, checklists, review findings and notes. Kanban is the initial view; your board/hierarchy and system/light/dark choices persist in the browser. Tasks sort active, blocked, queued, done, cancelled, then newest update first. Hierarchy keeps children under their parents.
-
-Task details have a primary **Back** button, separate **All tasks** navigation and clickable task breadcrumbs. Copy icons beside IDs on cards and task details copy the full ID without navigating. Notes show their count; stage/status, edit and parent controls live in the header.
-
-For frontend development, keep `bun run serve` running and start `bun run dev` in another terminal. Vite proxies the API and live updates to port 4317.
-
-## Subtasks
-
-Every task can have one parent in the same checkout and any number of children. Nesting has no depth limit; prefer two levels for ordinary work. Use todos for small implementation steps and subtasks for work that needs its own status, notes, findings, or ownership.
-
-```sh
-sds task create "Implement backend" --parent TASK
-sds task list --parent TASK                # direct children
-sds task list --parent TASK --recursive    # all descendants
-sds task list --roots                     # top-level tasks
-sds task move CHILD --parent TASK --revision 1
-sds task move CHILD --root --revision 2
-```
-
-JSON creation accepts `parentId`; updates accept `{"type":"parent.set","parentId":"TASK"}` or `parentId: null` to detach. HTTP and MCP use the same fields. List accepts `parentId: null` for roots or a task reference for children, with `recursive: true` for descendants. Unfiltered listing still returns every task. Working/full task views include ancestor summaries and a direct subtask count.
-
-Switch from Kanban to the collapsible hierarchy when you want to inspect parent/child structure. Task details provide parent navigation, direct children, **Add subtask**, and **Change parent**. Filtering keeps matching tasks' ancestors visible for context.
-
-Moving a task carries its entire subtree. Parent and child statuses remain independent: completing a parent does not complete its children. Only the moved task's revision changes. Self-parenting, cycles, and cross-checkout parents are rejected, including concurrent conflicting moves. Tasks without a parent remain compatible without migration. Parent IDs are stored only on children; external Git changes can still introduce invalid links, which SDS reports rather than silently hiding.
-
-## Dependencies
-
-Tasks can have prerequisite tasks within the same checkout. Use `dependencyIds`
-in `task create --json`, or replace the set with an update:
-
-```sh
-sds task update TASK --revision N --json '{"operations":[{"type":"dependencies.set","dependencyIds":["TASK_REF"]}]}'
-```
-
-Refs resolve to full IDs; an empty array clears dependencies. Cycles and missing
-references are rejected. Dependencies do not automatically change statuses.
-Working/full views include linked prerequisite and dependent summaries. Existing
-task files without `dependencyIds` remain compatible.
-
-The dashboard shows clickable prerequisite and dependent task links and lets you add/remove prerequisites.
-
-## Compact receipts and multi-task commands
-
-Mutation receipts contain IDs, revisions, counts and newly added refs without echoing todo titles. Pass `--verbose` to include update descriptions and created todo titles (API: `verbose: true`). Full descriptions remain in task history.
-
-```sh
-sds task get-many TASK1 TASK2
-sds schema update-many
-sds task update-many --json '{"updates":[{"taskId":"TASK1","expectedRevision":3,"operations":[{"type":"stage.set","stage":"reviewing"}]},{"taskId":"TASK2","expectedRevision":5,"operations":[{"type":"status.set","status":"active"}]}]}'
-```
-
-`--stdin` also accepts this JSON. Batches support up to 100 entries. The entire input shape is validated before writes. Entries then execute in input order, each with its own lock and revision check; repeated refs execute sequentially too. Atomicity applies to one task update, not the whole batch. No automatic retries occur. Results contain ordered `items` with `taskId`, `ok` and `data` or `error`, plus `succeeded` and `failed` counts. CLI exit code is 1 for any failed entry, with the complete result on stdout; invalid batch input exits 2 with an error on stderr and no writes. Read batches are not a transactionally consistent snapshot.
-
-MCP exposes `task_get_many` / `task_update_many`; HTTP exposes `/api/tasks/get-many` / `/api/tasks/update-many`. Both add `checkoutId` to the CLI payload. A valid batch returns its per-entry outcomes normally even with failures; callers must inspect `failed` (MCP `isError` remains false, HTTP status 200).
-
-Storage access errors identify the affected path. For an inaccessible global state directory, grant access or configure `--state-dir` / `SDS_STATE_DIR`. Keep the directory consistent across CLI and server processes so they share locks and registrations.
-
-## Storage and worktrees
-
-```text
-.agent-work/
-  project.json
-  tasks/<21-character-nanoid>.json
-```
-
-Commit `.agent-work/project.json` before creating worktrees so they inherit the same project identity. Each registered checkout has its own local checkout ID, and its own task versions. Tasks, todos, and findings retain their IDs when merged.
-
-One file per task avoids a shared task-index merge hotspot. Simultaneous edits to the same task across branches still require Git conflict resolution. Prefer one owning worktree per task. Locks and revision checks coordinate local SDS writers using the same state directory; external editors and Git operations do not participate in those locks. Interrupted-process locks expire after 30 seconds.
-
-The server binds only to loopback and checks Host/Origin. It is intended for trusted local agents, not network deployment or multi-user hosting. Pi and other shell-based agents can use the CLI directly.
-
-## Configuration
-
-Environment variables:
-
-- `SDS_PORT`: server port (default `4317`).
-- `SDS_STATE_DIR`: local registry and locks (default `~/.local/state/sds`). All server processes accessing the same checkouts must share this directory.
-- `SDS_PROJECT`: optionally register a checkout at startup.
-
-Disposable development fixtures and their local state belong in the ignored `.sds-local/` directory. Normal startup uses the default state directory above.
-
-## Development
-
-```sh
 bun test
 bun run typecheck
 bun run build
+bun run serve
 ```
 
-Core tests cover atomic rollback, simultaneous writers, short references, worktree isolation, schema errors, and transient activity. Transport tests use the official MCP client and exercise the shared HTTP state.
+For frontend development, run `bun run dev` in another terminal; Vite proxies requests to the server on port 4317. Disposable fixtures belong in the ignored `.sds-local/` directory.
 
-- `src/core/schema.ts`: domain and command schemas; source of MCP JSON schemas.
-- `src/core/storage.ts`: filesystem operations, locks, atomic writes, ID resolution.
-- `src/core/service.ts`: shared task operations.
-- `src/server/`: HTTP/MCP adapters, live events, startup.
-- `src/cli/main.ts`: CLI adapter over the shared core.
-- `src/App.tsx`, `src/components/`: dashboard.
+Shared task operations live in `src/core/`; `src/cli/` and `src/server/` provide adapters. The dashboard lives in `src/App.tsx` and `src/components/`. Read [AGENTS.md](AGENTS.md) before contributing.
 
-Effect is pinned by `bun.lock` to a v4 release candidate; read its installed `AGENTS.md` before changing Effect code.
+### Releases
 
-## Optional MCP interface
-
-The CLI above is the primary workflow for shell-based agents, including Pi. MCP is an optional adapter over the same task operations. Start the dashboard/server, then configure a Streamable HTTP connection to:
-
-```text
-http://127.0.0.1:4317/mcp
-```
-
-A common configuration shape is below; adapt the enclosing configuration to your harness:
-
-```json
-{
-  "mcpServers": {
-    "sds": { "url": "http://127.0.0.1:4317/mcp" }
-  }
-}
-```
-
-Tools:
-
-| Tool                                | Purpose                                                                             |
-| ----------------------------------- | ----------------------------------------------------------------------------------- |
-| `checkout_register`                 | Register an absolute local folder path; returns its checkout ID and dashboard path. |
-| `checkout_list`                     | Discover registered checkouts.                                                      |
-| `task_create`                       | Create a task and initial todos together.                                           |
-| `task_list`                         | Compact summaries, filters, and offset pagination.                                  |
-| `task_get`                          | Working view by default; full details or paginated history on request.              |
-| `task_update`                       | Apply a batch of semantic operations atomically at an expected revision.            |
-| `task_get_many`, `task_update_many` | Read/update multiple tasks with per-task outcomes.                                  |
-| `task_heartbeat`                    | Report live activity without changing tracked files.                                |
-
-Every task call requires `checkoutId`. Task, todo, and finding references accept full Nano IDs or unambiguous prefixes of at least four characters. Responses provide short references; ambiguous input fails instead of choosing a match.
-
-Example `task_update` arguments:
-
-```json
-{
-  "checkoutId": "<checkout-id>",
-  "taskId": "<task-ref>",
-  "expectedRevision": 3,
-  "operations": [
-    { "type": "todo.complete", "todoIds": ["<todo-ref>", "<todo-ref>"] },
-    { "type": "stage.set", "stage": "reviewing" },
-    {
-      "type": "note.add",
-      "text": "Implementation complete. Build and checks passed."
-    }
-  ]
-}
-```
-
-Other operations: `dependencies.set`, `parent.set`, `title.set`, `description.set`, `status.set`, `todo.add`, `todo.update`, `finding.add`, and `finding.resolve`. Tool schemas describe each payload. A blocked status requires a reason; finding resolution requires an explanation. A conflict returns an actionable error: retrieve the latest task, reconcile changes, and retry with its revision. A batch either succeeds completely or leaves the task unchanged.
-
-Refresh a running heartbeat every 30 seconds; it expires after 60 seconds. Send `running: false` when finished. Activity is held in server memory and resets on restart. An active task status alone does not mean an agent is running.
-
-## Publishing releases
-
-The GitHub Actions release workflow builds macOS and Linux executables for ARM64 and x64, packages the dashboard and skills, and publishes archives, SHA-256 checksums, and the installer. Manual workflow runs on a branch build downloadable artifacts without publishing a release.
-
-Update the package version, commit and push the changes, then push a matching `vX.Y.Z` tag. The workflow checks the tag against `package.json`. GitHub's built-in token publishes the release; no npm account or separate publishing secret is required. The installer attached to the release is an asset for users, not a command executed by the publish step.
-
-After committing the version and release changes, run from this repository (requires Bun):
+From a clean, committed checkout on a branch:
 
 ```sh
-bun run release            # bump if needed, commit the version, push branch and tag
-
-# Or run the steps separately:
-bun run release:tag
-bun run release:push
+bun run release
 ```
 
-Release requires a clean checkout and a branch. The helper fetches tags from origin. If the current version tags an older commit, it selects the next unused patch version, updates package.json, and commits the version change. It then pushes the branch and tag atomically. Existing tags are never moved. Repeating at the same commit reuses its tag; after a failed push, rerun `bun release`. Set major, minor, or prerelease versions manually when needed.
+The helper creates and pushes a version tag with the branch, bumping and committing the patch version if the current version was already released from another commit. Set major, minor or prerelease versions manually. GitHub Actions builds and publishes the platform archives, dashboard, skills and installer. Separate steps are available as `bun run release:tag` and `bun run release:push`.
 
-Installer sources live in `scripts/installer/`; `scripts/install.sh` loads them when run from a checkout. `sh scripts/bundle-installer.sh > install.sh` produces the standalone release installer. Edit the source modules, not generated bundles.
+Installer sources are in `scripts/installer/`. Bundle them with `sh scripts/bundle-installer.sh > install.sh`; edit source modules rather than generated bundles.
