@@ -11,9 +11,9 @@
     "typecheck": "tsc --noEmit",
     "test": "bun test",
     "cli": "bun run src/cli/main.ts",
-    "release:tag": "sh scripts/release.sh tag",
-    "release:push": "sh scripts/release.sh push",
-    "release": "bun run release:tag && bun run release:push"
+    "release:tag": "bun scripts/release.ts tag",
+    "release:push": "bun scripts/release.ts push",
+    "release": "bun scripts/release.ts"
   },
   "dependencies": {
     "@base-ui/react": "^1.8.0",

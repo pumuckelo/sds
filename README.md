@@ -192,16 +192,16 @@ A common configuration shape is below; adapt the enclosing configuration to your
 
 Tools:
 
-| Tool | Purpose |
-| --- | --- |
-| `checkout_register` | Register an absolute local folder path; returns its checkout ID and dashboard path. |
-| `checkout_list` | Discover registered checkouts. |
-| `task_create` | Create a task and initial todos together. |
-| `task_list` | Compact summaries, filters, and offset pagination. |
-| `task_get` | Working view by default; full details or paginated history on request. |
-| `task_update` | Apply a batch of semantic operations atomically at an expected revision. |
-| `task_get_many`, `task_update_many` | Read/update multiple tasks with per-task outcomes. |
-| `task_heartbeat` | Report live activity without changing tracked files. |
+| Tool                                | Purpose                                                                             |
+| ----------------------------------- | ----------------------------------------------------------------------------------- |
+| `checkout_register`                 | Register an absolute local folder path; returns its checkout ID and dashboard path. |
+| `checkout_list`                     | Discover registered checkouts.                                                      |
+| `task_create`                       | Create a task and initial todos together.                                           |
+| `task_list`                         | Compact summaries, filters, and offset pagination.                                  |
+| `task_get`                          | Working view by default; full details or paginated history on request.              |
+| `task_update`                       | Apply a batch of semantic operations atomically at an expected revision.            |
+| `task_get_many`, `task_update_many` | Read/update multiple tasks with per-task outcomes.                                  |
+| `task_heartbeat`                    | Report live activity without changing tracked files.                                |
 
 Every task call requires `checkoutId`. Task, todo, and finding references accept full Nano IDs or unambiguous prefixes of at least four characters. Responses provide short references; ambiguous input fails instead of choosing a match.
 
@@ -215,7 +215,10 @@ Example `task_update` arguments:
   "operations": [
     { "type": "todo.complete", "todoIds": ["<todo-ref>", "<todo-ref>"] },
     { "type": "stage.set", "stage": "reviewing" },
-    { "type": "note.add", "text": "Implementation complete. Build and checks passed." }
+    {
+      "type": "note.add",
+      "text": "Implementation complete. Build and checks passed."
+    }
   ]
 }
 ```
@@ -233,13 +236,13 @@ Update the package version, commit and push the changes, then push a matching `v
 After committing the version and release changes, run from this repository (requires Bun):
 
 ```sh
-bun run release            # create the version tag and push it to GitHub
+bun run release            # bump if needed, commit the version, push branch and tag
 
 # Or run the steps separately:
 bun run release:tag
 bun run release:push
 ```
 
-Tag creation requires a clean checkout. Repeating it is safe when the tag already points to the current commit; an existing tag is never moved. For subsequent releases, bump the package version first. The push command publishes the existing tag, even if your branch has newer commits.
+Release requires a clean checkout and a branch. The helper fetches tags from origin. If the current version tags an older commit, it selects the next unused patch version, updates package.json, and commits the version change. It then pushes the branch and tag atomically. Existing tags are never moved. Repeating at the same commit reuses its tag; after a failed push, rerun `bun release`. Set major, minor, or prerelease versions manually when needed.
 
 Installer sources live in `scripts/installer/`; `scripts/install.sh` loads them when run from a checkout. `sh scripts/bundle-installer.sh > install.sh` produces the standalone release installer. Edit the source modules, not generated bundles.
