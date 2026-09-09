@@ -1,0 +1,67 @@
+{
+  "schemaVersion": 1,
+  "id": "Yu0uRGZKmXyqecifSR14-",
+  "title": "Polish dashboards and add linked task dependencies",
+  "description": "Logos, light/dark themes for both apps; clean task headers; persistent Kanban default; status ordering; structured dependency links.",
+  "dependencyIds": [
+    "BgkGQPr6Uqzt8AzbxGUOo"
+  ],
+  "stage": "reviewing",
+  "status": "done",
+  "revision": 5,
+  "createdAt": "2026-09-09T08:38:20.264Z",
+  "updatedAt": "2026-09-09T09:02:49.061Z",
+  "todos": [],
+  "findings": [],
+  "notes": [
+    {
+      "id": "1SCl_ix4HdhkXF9GrJ09P",
+      "text": "Implemented clean SVG logos/favicons, system/light/dark persistence, neutral white/charcoal bridge with official Rust/TypeScript icons, default persisted Kanban, active-first status/time order, distinct status badges, compact detail header, notes count and inline add-subtask. Added dependencyIds/dependencies.set in shared core with same-checkout ref resolution, cycle rejection and concurrency lock; linked both directions in UI and migrated quoted companion task. SDS: 30 tests/256 assertions and build pass; shared bridge TypeScript diagnostics fresh/clean. Bridge: 6 unit tests, release build and Clippy pass. Both servers refreshed; three workspaces retained and demo disconnected. Browser verified themes, hierarchy persistence and dependency navigation. No graph view added; linked lists keep the page compact.",
+      "createdAt": "2026-09-09T08:54:01.403Z"
+    }
+  ],
+  "history": [
+    {
+      "id": "yeD7r1SKDK3yHe2LyiyCY",
+      "revision": 1,
+      "at": "2026-09-09T08:38:20.264Z",
+      "changes": [
+        "Task created"
+      ]
+    },
+    {
+      "id": "6qaKsdyBk-jtTtGLgK8Hh",
+      "revision": 2,
+      "at": "2026-09-09T08:40:38.406Z",
+      "changes": [
+        "Stage: implementing",
+        "Status: active"
+      ]
+    },
+    {
+      "id": "BaB1z5FWRZXkRptFBhmFb",
+      "revision": 3,
+      "at": "2026-09-09T08:54:01.403Z",
+      "changes": [
+        "Stage: reviewing",
+        "Progress note added"
+      ]
+    },
+    {
+      "id": "n4QQFafzXAVdHlWlqQKGT",
+      "revision": 4,
+      "at": "2026-09-09T08:54:39.070Z",
+      "changes": [
+        "Dependencies: BgkGQPr6Uqzt8AzbxGUOo"
+      ]
+    },
+    {
+      "id": "T9wz1jzVLXjAPPdARCI4B",
+      "revision": 5,
+      "at": "2026-09-09T09:02:49.061Z",
+      "changes": [
+        "Status: done"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,64 @@
+{
+  "schemaVersion": 1,
+  "id": "5AgCmFFGPgr-MdBGgmp3z",
+  "title": "Fix task back navigation",
+  "description": "Use browser history for task Back with parent fallback; keep All tasks separate. User confirmed cursor flicker disappeared after computer use stopped; no cursor changes.",
+  "dependencyIds": [],
+  "stage": "reviewing",
+  "status": "done",
+  "revision": 4,
+  "createdAt": "2026-09-09T09:03:24.358Z",
+  "updatedAt": "2026-09-09T09:27:37.959Z",
+  "todos": [],
+  "findings": [],
+  "notes": [
+    {
+      "id": "s5lPTP0N10YC4YVDoIKjo",
+      "text": "Back now uses SDS browser history, preserving parent/subtask and dependency navigation across refresh. Directly opened task falls back to its parent or board without leaving SDS. All tasks remains separate. Prevented duplicate same-route history entries. TypeScript check and production build passed; git diff --check clean. No computer use or cursor styling changes.",
+      "createdAt": "2026-09-09T09:04:16.113Z"
+    },
+    {
+      "id": "A4VKVQsZjqxnYy5aSAdo5",
+      "text": "Follow-up: made the in-page Back button the primary top-left task action; All tasks is now secondary. Global breadcrumbs now derive project/branch/ancestor/current task from the active route and task hierarchy, with clickable ancestors. Removed duplicate parent breadcrumb row. Task navigation resets scroll to expose Back. TypeScript and production build passed; no computer use.",
+      "createdAt": "2026-09-09T09:27:37.959Z"
+    }
+  ],
+  "history": [
+    {
+      "id": "PbRXwIofVVsURLxzY58a-",
+      "revision": 1,
+      "at": "2026-09-09T09:03:24.358Z",
+      "changes": [
+        "Task created"
+      ]
+    },
+    {
+      "id": "w4-rVSYzmuDiOlYKFmpTr",
+      "revision": 2,
+      "at": "2026-09-09T09:04:02.026Z",
+      "changes": [
+        "Title updated",
+        "Description updated",
+        "Stage: reviewing",
+        "Status: active"
+      ]
+    },
+    {
+      "id": "XQ-BCcj_vhVj398fAxdXi",
+      "revision": 3,
+      "at": "2026-09-09T09:04:16.113Z",
+      "changes": [
+        "Progress note added",
+        "Status: done"
+      ]
+    },
+    {
+      "id": "bvxM8GnzyTHBqI6SM0gaO",
+      "revision": 4,
+      "at": "2026-09-09T09:27:37.959Z",
+      "changes": [
+        "Progress note added"
+      ]
+    }
+  ]
+}

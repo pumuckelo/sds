@@ -19,7 +19,7 @@ export const Finding = Schema.Struct({
 export const Note = Schema.Struct({ id: Id, text: Text, createdAt: Timestamp })
 export const Event = Schema.Struct({ id: Id, revision: Revision, at: Timestamp, changes: Schema.Array(Schema.String) })
 export const Task = Schema.Struct({
-  schemaVersion: Schema.Literal(1), id: Id, title: Title, description: Text, parentId: Schema.optional(Id),
+  schemaVersion: Schema.Literal(1), id: Id, title: Title, description: Text, parentId: Schema.optional(Id), dependencyIds: Schema.optional(Schema.Array(Id)),
   stage: Stage, status: Status, blocker: Schema.optional(Text), revision: Revision,
   createdAt: Timestamp, updatedAt: Timestamp, todos: Schema.Array(Todo), findings: Schema.Array(Finding),
   notes: Schema.Array(Note), history: Schema.Array(Event),
@@ -34,10 +34,11 @@ export const Registry = Schema.Struct({ schemaVersion: Schema.Literal(1), checko
 
 export const RegisterInput = Schema.Struct({ path: Schema.NonEmptyString, name: Schema.optional(Title) })
 export const CreateInput = Schema.Struct({
-  checkoutId: Ref, title: Title, description: Schema.optional(Text), parentId: Schema.optional(Ref), verbose: Schema.optional(Schema.Boolean),
+  checkoutId: Ref, title: Title, description: Schema.optional(Text), parentId: Schema.optional(Ref), dependencyIds: Schema.optional(Schema.Array(Ref).check(Schema.isMaxLength(200))), verbose: Schema.optional(Schema.Boolean),
   todos: Schema.optional(Schema.Array(Schema.Struct({ title: Title, stage: Schema.optional(Stage) })).check(Schema.isMaxLength(200))),
 })
 export const Operation = Schema.Union([
+  Schema.Struct({ type: Schema.Literal('dependencies.set'), dependencyIds: Schema.Array(Ref).check(Schema.isMaxLength(200)) }),
   Schema.Struct({ type: Schema.Literal('parent.set'), parentId: Schema.NullOr(Ref) }),
   Schema.Struct({ type: Schema.Literal('title.set'), title: Title }),
   Schema.Struct({ type: Schema.Literal('description.set'), description: Text }),

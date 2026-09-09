@@ -1,3 +1,4 @@
+import { StatusBadge } from './status-badge'
 import { useState } from 'react'
 import { ChevronDown, ChevronRight } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -33,7 +34,7 @@ export function TaskTree({ tasks, matches, onOpen }: { tasks: Item[]; matches: I
     {(children.get(task.id)?.length ?? 0) > 0 ? <Button variant="ghost" size="icon-sm" aria-label={`Toggle subtasks of ${task.title}`} aria-expanded={filtering || !collapsed.has(task.id)} disabled={filtering} onClick={() => setCollapsed(previous => { const next = new Set(previous); if (next.has(task.id)) next.delete(task.id); else next.add(task.id); return next })}>{collapsed.has(task.id) && !filtering ? <ChevronRight /> : <ChevronDown />}</Button> : <span className="size-7 shrink-0" />}
     <Button variant="ghost" className="min-w-0 flex-1 justify-start" onClick={() => onOpen(task.id)}><span className="truncate">{task.title}</span></Button>
     <code className="text-xs text-muted-foreground">{task.ref}</code>
-    <Badge variant="outline">{humanize(task.stage)}</Badge><Badge variant={task.status === 'blocked' ? 'destructive' : 'secondary'}>{humanize(task.status)}</Badge>
+    <Badge variant="outline">{humanize(task.stage)}</Badge><StatusBadge status={task.status} />
     {task.subtaskCount > 0 && <span className="text-xs text-muted-foreground">{task.subtaskCount} subtasks</span>}
   </div>)}</div>
 }

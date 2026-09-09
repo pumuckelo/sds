@@ -172,3 +172,38 @@ test('parent refs stay in checkout; invalid graph imported from files is reporte
   expect(await call(service => service.update({ checkoutId, taskId: parent.id, expectedRevision: 1, operations: [{ type: 'parent.set', parentId: null }] }))).toMatchObject({ ok: true })
   expect(await call(service => service.list({ checkoutId }))).toMatchObject({ ok: true })
 })
+
+describe('task dependencies', () => {
+  test('resolves refs, exposes both directions, rejects cycles and detaches', async () => {
+    const a = await create(), b = await create(), c = await create()
+    const set = (id: string, revision: number, dependencyIds: string[]) => call(service => service.update({ checkoutId, taskId: id, expectedRevision: revision, operations: [{ type: 'dependencies.set', dependencyIds }] }))
+    expect((await set(b.id, 1, [a.ref, a.id])).ok).toBe(true)
+    expect((await stored(b.id)).dependencyIds).toEqual([a.id])
+    expect((await set(c.id, 1, [b.ref])).ok).toBe(true)
+    expect((await set(a.id, 1, [c.id])).ok).toBe(false)
+    expect((await set(a.id, 1, [a.id])).ok).toBe(false)
+    expect((await set(a.id, 1, ['missing'])).ok).toBe(false)
+    expect((await stored(a.id)).revision).toBe(1)
+    const view = await call(service => service.get({ checkoutId, taskId: b.id, view: 'full' }))
+    if (!view.ok || !('dependencies' in view.data)) throw new Error('Expected dependency view')
+    expect(view.data.dependencies.map(task => task.id)).toEqual([a.id])
+    expect(view.data.dependents.map(task => task.id)).toEqual([c.id])
+    expect((await set(b.id, 2, [])).ok).toBe(true)
+    expect((await stored(b.id)).dependencyIds).toEqual([])
+  })
+  test('opposing concurrent dependency writes cannot create a cycle', async () => {
+    const a = await create(), b = await create()
+    const results = await Promise.all([[a.id, b.id], [b.id, a.id]].map(([id, dependency]) => call(service => service.update({ checkoutId, taskId: id, expectedRevision: 1, operations: [{ type: 'dependencies.set', dependencyIds: [dependency] }] }))))
+    expect(results.filter(result => result.ok)).toHaveLength(1)
+  })
+  test('creation validates dependencies and legacy files remain readable', async () => {
+    const a = await create()
+    const legacy = await stored(a.id); delete (legacy as { dependencyIds?: readonly string[] }).dependencyIds
+    await writeFile(join(path, '.agent-work/tasks', `${a.id}.json`), JSON.stringify(legacy))
+    const created = await call(service => service.create({ checkoutId, title: 'Dependent', dependencyIds: [a.ref] }))
+    expect(created.ok).toBe(true)
+    if (created.ok) expect((await stored(created.data.id)).dependencyIds).toEqual([a.id])
+    const view = await call(service => service.get({ checkoutId, taskId: a.id, view: 'full' }))
+    expect(view.ok && 'dependencyIds' in view.data && view.data.dependencyIds).toEqual([])
+  })
+})

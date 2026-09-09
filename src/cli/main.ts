@@ -60,7 +60,7 @@ const inputJson = Effect.fn('cli.inputJson')(function* (stdin: boolean, json: Op
   const text = Option.isSome(json) ? json.value : yield* io('Read stdin', () => Bun.stdin.text())
   return yield* Effect.try({ try: () => JSON.parse(text) as unknown, catch: () => failure('INVALID_INPUT', 'Input must be valid JSON') })
 })
-const CreateBody = Schema.Struct({ parentId: S.CreateInput.fields.parentId, title: S.Title, description: Schema.optional(S.Text), todos: S.CreateInput.fields.todos })
+const CreateBody = Schema.Struct({ dependencyIds: S.CreateInput.fields.dependencyIds, parentId: S.CreateInput.fields.parentId, title: S.Title, description: Schema.optional(S.Text), todos: S.CreateInput.fields.todos })
 const UpdateBody = Schema.Struct({ expectedRevision: Schema.optional(S.Revision), operations: S.UpdateInput.fields.operations })
 const updateTask = Effect.fn('cli.updateTask')(function* (taskId: string, expectedRevision: number, operations: readonly (typeof S.Operation.Type)[]) {
   const { verbose } = yield* root

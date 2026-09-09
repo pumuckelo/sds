@@ -179,3 +179,22 @@ JSON creation accepts `parentId`; updates accept `{"type":"parent.set","parentId
 The dashboard defaults to a collapsible hierarchy, with the board available as an alternative. Task details provide parent navigation, direct children, **Add subtask**, and **Change parent**. Filtering keeps matching tasks' ancestors visible for context.
 
 Moving a task carries its entire subtree. Parent and child statuses remain independent: completing a parent does not complete its children. Only the moved task's revision changes. Self-parenting, cycles, and cross-checkout parents are rejected, including concurrent conflicting moves. Tasks without a parent remain compatible without migration. Parent IDs are stored only on children; external Git changes can still introduce invalid links, which SDS reports rather than silently hiding.
+
+### Linked dependencies and dashboard preferences
+
+Tasks can have prerequisite tasks within the same checkout. Use `dependencyIds`
+in `task create --json`, or replace the set with an update:
+
+```sh
+sds task update TASK --revision N --json '{"operations":[{"type":"dependencies.set","dependencyIds":["TASK_REF"]}]}'
+```
+
+Refs resolve to full IDs; an empty array clears dependencies. Cycles and missing
+references are rejected. Dependencies do not automatically change statuses.
+Working/full views include linked prerequisite and dependent summaries. Existing
+task files without `dependencyIds` remain compatible.
+
+The dashboard links both directions and lets you add/remove prerequisites.
+Kanban is the initial view; your view and system/light/dark theme choices persist
+in this browser. Tasks sort active, blocked, queued, done, cancelled, with newest
+updates first within each status (hierarchy keeps children under their parents).

@@ -9,9 +9,11 @@ import { Empty, EmptyHeader, EmptyMedia, EmptyTitle, EmptyDescription, EmptyCont
 import { Separator } from '@/components/ui/separator'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog'
 import { EditDialog, Choice } from '@/components/forms'
+import { ThemePicker } from '@/components/theme-picker'
+import { StatusBadge } from '@/components/status-badge'
 import { TaskTree } from '@/components/task-tree'
 import { TaskDetail } from '@/components/task-detail'
-import { api, timeAgo, humanize, type CheckoutView, type TaskList, type TaskView } from '@/lib/api'
+import { api, timeAgo, compareTasks, type CheckoutView, type TaskList, type TaskView } from '@/lib/api'
 import { cn } from '@/lib/utils'
 
 function readRoute() {
@@ -24,14 +26,22 @@ export default function App() {
   const [checkouts, setCheckouts] = useState<CheckoutView[]>([]), [tasks, setTasks] = useState<TaskList['items']>([]), [task, setTask] = useState<TaskView | null>(null)
   const [loading, setLoading] = useState(true), [error, setError] = useState(''), [connected, setConnected] = useState(false)
   const [dialog, setDialog] = useState<'register' | 'create' | 'connect' | null>(null)
-  const [view, setView] = useState('hierarchy')
+  const [view, setView] = useState(() => { try { return localStorage.getItem('sds-task-view') === 'hierarchy' ? 'hierarchy' : 'board' } catch { return 'board' } })
+  useEffect(() => { try { localStorage.setItem('sds-task-view', view) } catch { /* Storage is optional. */ } }, [view])
   const [search, setSearch] = useState(''), [status, setStatus] = useState('all')
   const refresh = useCallback(() => setVersion(version => version + 1), [])
   const navigate = useCallback((checkoutId: string, taskId = '', replace = false) => {
-    history[replace ? 'replaceState' : 'pushState']({}, '', checkoutId ? `/checkouts/${checkoutId}${taskId ? `/tasks/${taskId}` : ''}` : '/')
+    const url = checkoutId ? `/checkouts/${checkoutId}${taskId ? `/tasks/${taskId}` : ''}` : '/'
+    if (url === location.pathname) return
+    history[replace ? 'replaceState' : 'pushState'](replace ? history.state : { sdsPrevious: true }, '', url)
+    window.scrollTo({ top: 0, behavior: 'instant' })
     setRoute({ checkoutId, taskId }); setTask(null); setLoading(true); setError('')
   }, [])
-  useEffect(() => { const onPop = () => { setRoute(readRoute()); setTask(null); setLoading(true) }; addEventListener('popstate', onPop); return () => removeEventListener('popstate', onPop) }, [])
+  const goBack = () => {
+    if (history.state?.sdsPrevious === true) history.back()
+    else navigate(route.checkoutId, task?.parentId ?? '', true)
+  }
+  useEffect(() => { const onPop = () => { window.scrollTo({ top: 0, behavior: 'instant' }); setRoute(readRoute()); setTask(null); setLoading(true) }; addEventListener('popstate', onPop); return () => removeEventListener('popstate', onPop) }, [])
   useEffect(() => {
     const events = new EventSource('/events')
     let debounce: ReturnType<typeof setTimeout>
@@ -57,7 +67,7 @@ export default function App() {
             const page: TaskList = await api('tasks/list', { checkoutId: route.checkoutId, offset, limit: 100 }, controller.signal)
             all.push(...page.items); offset = page.nextOffset
           }
-          setTasks(all)
+          setTasks(all.sort(compareTasks))
           if (route.taskId) setTask(await api<TaskView>('tasks/get', { checkoutId: route.checkoutId, taskId: route.taskId, view: 'full' }, controller.signal))
         } else { setTasks([]); setTask(null) }
         setError('')
@@ -67,13 +77,23 @@ export default function App() {
     return () => controller.abort()
   }, [version, route.checkoutId, route.taskId, navigate])
   const checkout = checkouts.find(entry => entry.id === route.checkoutId)
+  const currentTask = task?.id === route.taskId ? task : tasks.find(item => item.id === route.taskId)
+  const breadcrumbTasks: { id: string; title: string }[] = []
+  const visited = new Set<string>()
+  let breadcrumbTask = currentTask
+  while (breadcrumbTask && !visited.has(breadcrumbTask.id)) {
+    visited.add(breadcrumbTask.id)
+    breadcrumbTasks.unshift({ id: breadcrumbTask.id, title: breadcrumbTask.title })
+    const parentId = breadcrumbTask.parentId
+    breadcrumbTask = tasks.find(item => item.id === parentId)
+  }
   const groups = new Map<string, CheckoutView[]>()
   for (const entry of checkouts) groups.set(entry.projectId, [...(groups.get(entry.projectId) ?? []), entry])
   const visible = tasks.filter(task => (status === 'all' || task.status === status) && task.title.toLowerCase().includes(search.toLowerCase()))
   const active = tasks.filter(task => task.status === 'active').length, done = tasks.filter(task => task.status === 'done').length, blocked = tasks.filter(task => task.status === 'blocked').length
   return <div className="app-shell">
     <aside className="sidebar">
-      <a href="/" className="brand" onClick={event => { event.preventDefault(); navigate('') }}><span className="brand-symbol"><Layers3 className="size-5" /></span><strong>sds<span className="brand-period">.</span></strong><span className="brand-caption">AGENT WORKSPACE</span></a>
+      <a href="/" className="brand" onClick={event => { event.preventDefault(); navigate('') }}><img className="brand-logo" src="/logo.svg" alt="" width="34" height="34" /><strong>sds<span className="brand-period">.</span></strong><span className="brand-caption">AGENT WORKSPACE</span></a>
       <div className="sidebar-top"><span className="eyebrow">YOUR PROJECTS</span><Button variant="ghost" size="icon-sm" aria-label="Register project" onClick={() => setDialog('register')}><Plus /></Button></div>
       <nav aria-label="Projects" className="project-nav">{[...groups].map(([id, entries]) => <div key={id} className="project-group"><div className="project-name"><FolderGit2 className="size-4" /><span>{entries[0]?.projectName}</span></div>{entries.map(entry => <button key={entry.id} className={cn('checkout-link', route.checkoutId === entry.id && 'selected')} onClick={() => navigate(entry.id)}><GitBranch className="size-3.5" /><span className="truncate">{entry.branch || entry.name}</span>{!entry.available && <AlertCircle className="size-3.5" />}{route.checkoutId === entry.id && <span className="selection-dot" />}</button>)}</div>)}</nav>
       {checkouts.length === 0 && <p className="sidebar-hint">Connect a local folder to bring your agents’ work into view.</p>}
@@ -81,16 +101,16 @@ export default function App() {
       <div className="sidebar-bottom"><div className="local-note"><span className={cn('connection-dot', connected && 'online')} /><span>{connected ? 'Connected to local server' : 'Reconnecting to server'}</span></div><Separator /><Button variant="ghost" className="w-full justify-start" onClick={() => setDialog('connect')}><Cable data-icon="inline-start" />Connect an agent<ArrowUpRight data-icon="inline-end" /></Button><p>Local files. Shared context.<br />Your workflow, any harness.</p></div>
     </aside>
     <main className="main-shell">
-      <header className="topbar"><div className="flex items-center gap-2 min-w-0"><FolderGit2 className="size-4 text-muted-foreground" /><span className="truncate">{checkout?.projectName ?? 'Workspace'}</span>{checkout && <><span className="text-muted-foreground">/</span><span className="text-muted-foreground truncate">{checkout.branch ?? checkout.name}</span></>}</div><div className="flex items-center gap-3"><Badge variant="outline">Local workspace</Badge><Button variant="ghost" size="icon-sm" aria-label="Refresh workspace" onClick={refresh}><RefreshCw /></Button></div></header>
+      <header className="topbar"><nav aria-label="Breadcrumbs" className="breadcrumbs"><FolderGit2 className="size-4 shrink-0 text-muted-foreground" /><button onClick={() => navigate(route.checkoutId)}>{checkout?.projectName ?? 'Workspace'}</button>{checkout && <><span aria-hidden="true">/</span><button onClick={() => navigate(route.checkoutId)}>{checkout.branch ?? checkout.name}</button></>}{breadcrumbTasks.map((item, index) => <span className="breadcrumb-item" key={item.id}><span aria-hidden="true">/</span>{index === breadcrumbTasks.length - 1 ? <span aria-current="page">{item.title}</span> : <button onClick={() => navigate(route.checkoutId, item.id)}>{item.title}</button>}</span>)}</nav><div className="flex items-center gap-3"><ThemePicker /><Button variant="ghost" size="icon-sm" aria-label="Refresh workspace" onClick={refresh}><RefreshCw /></Button></div></header>
       <div className="workspace-content">
         {error && <Alert variant="destructive" className="mb-6"><AlertCircle /><AlertTitle>Unable to load workspace</AlertTitle><AlertDescription>{error} <button className="underline" onClick={refresh}>Retry</button></AlertDescription></Alert>}
-        {loading && !task && tasks.length === 0 ? <div className="flex flex-col gap-6" aria-label="Loading workspace"><Skeleton className="h-10 w-56" /><Skeleton className="h-24 w-full" /><div className="grid grid-cols-3 gap-5">{[0, 1, 2].map(i => <Skeleton key={i} className="h-64" />)}</div></div> : route.taskId ? task ? <TaskDetail key={`${route.checkoutId}/${task.id}`} task={task} tasks={tasks} onNavigate={id => navigate(route.checkoutId, id)} checkoutId={route.checkoutId} onBack={() => navigate(route.checkoutId)} refresh={refresh} /> : null : !checkout ? <Empty className="welcome"><EmptyHeader><EmptyMedia variant="icon"><Layers3 /></EmptyMedia><EmptyTitle>Give your agents a shared workspace.</EmptyTitle><EmptyDescription>Plan, implement, and review in one place. Your tasks stay in your repository, ready for any agent.</EmptyDescription></EmptyHeader><EmptyContent><Button onClick={() => setDialog('register')}><Plus data-icon="inline-start" />Register your first project</Button><Button variant="link" onClick={() => setDialog('connect')}>Set up an agent connection</Button></EmptyContent></Empty> : <>
+        {loading && !task && tasks.length === 0 ? <div className="flex flex-col gap-6" aria-label="Loading workspace"><Skeleton className="h-10 w-56" /><Skeleton className="h-24 w-full" /><div className="grid grid-cols-3 gap-5">{[0, 1, 2].map(i => <Skeleton key={i} className="h-64" />)}</div></div> : route.taskId ? task ? <TaskDetail key={`${route.checkoutId}/${task.id}`} task={task} tasks={tasks} onNavigate={id => navigate(route.checkoutId, id)} checkoutId={route.checkoutId} onBack={goBack} onAllTasks={() => navigate(route.checkoutId)} refresh={refresh} /> : null : !checkout ? <Empty className="welcome"><EmptyHeader><EmptyMedia variant="icon"><Layers3 /></EmptyMedia><EmptyTitle>Give your agents a shared workspace.</EmptyTitle><EmptyDescription>Plan, implement, and review in one place. Your tasks stay in your repository, ready for any agent.</EmptyDescription></EmptyHeader><EmptyContent><Button onClick={() => setDialog('register')}><Plus data-icon="inline-start" />Register your first project</Button><Button variant="link" onClick={() => setDialog('connect')}>Set up an agent connection</Button></EmptyContent></Empty> : <>
           <div className="board-heading"><div><div className="eyebrow">PROJECT OVERVIEW</div><h1>The work, in motion<span>.</span></h1><p>A shared view of what your agents are building.</p></div><Button size="lg" onClick={() => setDialog('create')} disabled={!checkout.available}><Plus data-icon="inline-start" />New task</Button></div>
           <div className="stats-strip"><div><span className="stat-label">Total tasks</span><strong>{tasks.length.toString().padStart(2, '0')}</strong><Layers3 /></div><div><span className="stat-label">In progress</span><strong>{active.toString().padStart(2, '0')}</strong><Activity /></div><div><span className="stat-label">Completed</span><strong>{done.toString().padStart(2, '0')}</strong><CircleCheck /></div><div><span className="stat-label">Needs attention</span><strong>{blocked.toString().padStart(2, '0')}</strong><AlertCircle /></div></div>
-          <div className="board-toolbar"><div className="flex gap-2 items-center"><h2>{view === 'hierarchy' ? 'Task hierarchy' : 'Task board'}</h2><Badge variant="secondary">{visible.length}</Badge></div><div className="flex flex-wrap items-center gap-2"><Choice label="Task view" value={view} values={['hierarchy', 'board']} onChange={setView} /><Input aria-label="Search tasks" placeholder="Search tasks…" value={search} onChange={event => setSearch(event.target.value)} className="w-48" /><Choice label="Filter by status" value={status} values={['all', 'queued', 'active', 'blocked', 'done', 'cancelled']} onChange={setStatus} /></div></div>
+          <div className="board-toolbar"><div className="flex gap-2 items-center"><h2>{view === 'hierarchy' ? 'Task hierarchy' : 'Task board'}</h2><Badge variant="secondary">{visible.length}</Badge></div><div className="flex flex-wrap items-center gap-2"><Choice label="Task view" value={view} values={['board', 'hierarchy']} onChange={setView} /><Input aria-label="Search tasks" placeholder="Search tasks…" value={search} onChange={event => setSearch(event.target.value)} className="w-48" /><Choice label="Filter by status" value={status} values={['all', 'queued', 'active', 'blocked', 'done', 'cancelled']} onChange={setStatus} /></div></div>
           {view === 'hierarchy' ? <TaskTree tasks={tasks} matches={visible} onOpen={id => navigate(route.checkoutId, id)} /> : <div className="kanban">{stageMeta.map(stage => {
             const items = visible.filter(task => task.stage === stage.id)
-            return <section className="kanban-column" key={stage.id}><div className="column-heading"><stage.icon className="size-4" /><h3>{stage.title}</h3><span>{items.length}</span></div><p className="column-subtitle">{stage.subtitle}</p><div className="column-tasks">{items.map(task => <button className={cn('task-card', task.status === 'done' && 'completed')} key={task.id} onClick={() => navigate(route.checkoutId, task.id)}><div className="task-card-meta"><code>{task.ref}</code><Badge variant={task.status === 'blocked' ? 'destructive' : task.status === 'active' ? 'default' : 'secondary'}>{humanize(task.status)}</Badge></div><h4>{task.title}</h4>{task.parentId && <p className="text-xs text-muted-foreground">Subtask of {tasks.find(parent => parent.id === task.parentId)?.title ?? task.parentId}</p>}{task.subtaskCount > 0 && <Badge variant="outline">{task.subtaskCount} subtasks</Badge>}<div className="task-card-progress"><div><span style={{ width: `${task.todoCount ? task.completedTodos / task.todoCount * 100 : 0}%` }} /></div><span>{task.completedTodos}/{task.todoCount}</span></div><div className="task-card-footer"><span>{task.activity.running ? 'Agent working' : `Updated ${timeAgo(task.updatedAt)}`}</span>{task.openFindings > 0 ? <span className="finding-count"><ShieldCheck className="size-3.5" />{task.openFindings}</span> : <ArrowUpRight className="size-3.5" />}</div></button>)}{items.length === 0 && <Empty className="column-empty"><EmptyHeader><EmptyTitle>{search || status !== 'all' ? 'No matching tasks' : 'Nothing here yet'}</EmptyTitle><EmptyDescription>{stage.id === 'planning' ? 'Every good build starts with a plan.' : stage.id === 'implementing' ? 'Tasks appear here when building begins.' : 'Ready for a second pair of eyes.'}</EmptyDescription></EmptyHeader></Empty>}</div></section>
+            return <section className="kanban-column" key={stage.id}><div className="column-heading"><stage.icon className="size-4" /><h3>{stage.title}</h3><span>{items.length}</span></div><p className="column-subtitle">{stage.subtitle}</p><div className="column-tasks">{items.map(task => <button className={cn('task-card', task.status === 'done' && 'completed')} key={task.id} onClick={() => navigate(route.checkoutId, task.id)}><div className="task-card-meta"><code>{task.ref}</code><StatusBadge status={task.status} /></div><h4>{task.title}</h4>{task.parentId && <p className="text-xs text-muted-foreground">Subtask of {tasks.find(parent => parent.id === task.parentId)?.title ?? task.parentId}</p>}{task.subtaskCount > 0 && <Badge variant="outline">{task.subtaskCount} subtasks</Badge>}<div className="task-card-progress"><div><span style={{ width: `${task.todoCount ? task.completedTodos / task.todoCount * 100 : 0}%` }} /></div><span>{task.completedTodos}/{task.todoCount}</span></div><div className="task-card-footer"><span>{task.activity.running ? 'Agent working' : `Updated ${timeAgo(task.updatedAt)}`}</span>{task.openFindings > 0 ? <span className="finding-count"><ShieldCheck className="size-3.5" />{task.openFindings}</span> : <ArrowUpRight className="size-3.5" />}</div></button>)}{items.length === 0 && <Empty className="column-empty"><EmptyHeader><EmptyTitle>{search || status !== 'all' ? 'No matching tasks' : 'Nothing here yet'}</EmptyTitle><EmptyDescription>{stage.id === 'planning' ? 'Every good build starts with a plan.' : stage.id === 'implementing' ? 'Tasks appear here when building begins.' : 'Ready for a second pair of eyes.'}</EmptyDescription></EmptyHeader></Empty>}</div></section>
           })}</div>}<footer className="board-footer"><span className="flex items-center gap-2"><span className={cn('connection-dot', connected && 'online')} />{connected ? 'Updates as your agents work' : 'Waiting for connection'}</span><span title={checkout.path} className="truncate">{checkout.path}/.agent-work</span></footer>
         </>}
       </div>
