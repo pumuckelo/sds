@@ -20,7 +20,7 @@ Environment variables:
 - `SDS_STATE_DIR`: local registry and locks (default `~/.local/state/sds`). All server processes accessing the same checkouts must share this directory.
 - `SDS_PROJECT`: optionally register a checkout at startup.
 
-The current development preview runs in the `sds-dev` shared terminal, with `SDS_STATE_DIR` set to this repository’s ignored `.sds-local/state`. Its preview project and sample task are disposable and also ignored. Normal startup uses the default state directory above.
+Disposable development fixtures and their local state belong in the ignored `.sds-local/` directory. Normal startup uses the default state directory above.
 
 ## CLI
 
@@ -108,7 +108,7 @@ Example `task_update` arguments:
 }
 ```
 
-Other operations: `title.set`, `description.set`, `status.set`, `todo.add`, `todo.update`, `finding.add`, and `finding.resolve`. Tool schemas describe each payload. A blocked status requires a reason; finding resolution requires an explanation. A conflict returns an actionable error: retrieve the latest task, reconcile changes, and retry with its revision. A batch either succeeds completely or leaves the task unchanged.
+Other operations: `parent.set`, `title.set`, `description.set`, `status.set`, `todo.add`, `todo.update`, `finding.add`, and `finding.resolve`. Tool schemas describe each payload. A blocked status requires a reason; finding resolution requires an explanation. A conflict returns an actionable error: retrieve the latest task, reconcile changes, and retry with its revision. A batch either succeeds completely or leaves the task unchanged.
 
 Refresh a running heartbeat every 30 seconds; it expires after 60 seconds. Send `running: false` when finished. Activity is held in server memory and resets on restart. An active task status alone does not mean an agent is running.
 
@@ -160,3 +160,22 @@ sds task update-many --json '{"updates":[{"taskId":"TASK1","expectedRevision":3,
 MCP exposes `task_get_many` / `task_update_many`; HTTP exposes `/api/tasks/get-many` / `/api/tasks/update-many`. Both add `checkoutId` to the CLI payload. A valid batch returns its per-entry outcomes normally even with failures; callers must inspect `failed` (MCP `isError` remains false, HTTP status 200).
 
 Storage access errors identify the affected path. For an inaccessible global state directory, grant access or configure `--state-dir` / `SDS_STATE_DIR`. Keep the directory consistent across CLI and server processes so they share locks and registrations.
+
+## Subtasks
+
+Every task can have one parent in the same checkout and any number of children. Nesting has no depth limit; prefer two levels for ordinary work. Use todos for small implementation steps and subtasks for work that needs its own status, notes, findings, or ownership.
+
+```sh
+sds task create "Implement backend" --parent TASK
+sds task list --parent TASK                # direct children
+sds task list --parent TASK --recursive    # all descendants
+sds task list --roots                     # top-level tasks
+sds task move CHILD --parent TASK --revision 1
+sds task move CHILD --root --revision 2
+```
+
+JSON creation accepts `parentId`; updates accept `{"type":"parent.set","parentId":"TASK"}` or `parentId: null` to detach. HTTP and MCP use the same fields. List accepts `parentId: null` for roots or a task reference for children, with `recursive: true` for descendants. Unfiltered listing still returns every task. Working/full task views include ancestor summaries and a direct subtask count.
+
+The dashboard defaults to a collapsible hierarchy, with the board available as an alternative. Task details provide parent navigation, direct children, **Add subtask**, and **Change parent**. Filtering keeps matching tasks' ancestors visible for context.
+
+Moving a task carries its entire subtree. Parent and child statuses remain independent: completing a parent does not complete its children. Only the moved task's revision changes. Self-parenting, cycles, and cross-checkout parents are rejected, including concurrent conflicting moves. Tasks without a parent remain compatible without migration. Parent IDs are stored only on children; external Git changes can still introduce invalid links, which SDS reports rather than silently hiding.

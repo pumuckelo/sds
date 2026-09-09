@@ -2,6 +2,7 @@ import { Context, DateTime, Effect, Layer } from 'effect'
 import { basename, join } from 'node:path'
 import { nanoid } from 'nanoid'
 import * as S from './schema'
+import { hierarchy } from './hierarchy'
 import { Storage, decode, failure, resolveRef, shortRef } from './storage'
 
 const timestamp = DateTime.now.pipe(Effect.map(DateTime.formatIso))
@@ -30,6 +31,18 @@ const createService = Effect.gen(function* () {
   const taskId = Effect.fn('taskId')(function* (entry: S.Checkout, ref: string) {
     return (yield* resolveRef((yield* storage.taskFiles(entry.path)).map(file => ({ id: file.slice(0, -5) })), ref)).id
   })
+  const allTasks = Effect.fn('task.all')(function* (entry: S.Checkout) {
+    return yield* Effect.forEach(yield* storage.taskFiles(entry.path), file => readTask(entry, file.slice(0, -5)))
+  })
+  const validateParent = Effect.fn('task.validateParent')(function* (entry: S.Checkout, id: string, ref: string | null) {
+    if (ref === null) return undefined
+    const all = yield* allTasks(entry)
+    const parent = yield* resolveRef(all, ref)
+    const ancestors = yield* Effect.try({ try: () => hierarchy(all).ancestors(parent.id), catch: error => error as S.SdsError })
+    if (parent.id === id || ancestors.some(task => task.id === id)) return yield* failure('INVALID_INPUT', 'A task cannot be its own parent or move beneath one of its descendants')
+    return parent.id
+  })
+  const brief = (task: S.Task, all: readonly S.Task[]) => ({ id: task.id, ref: shortRef(task.id, all), title: task.title, status: task.status, stage: task.stage })
   const live = new Map<string, { agent: string; seenAt: string; expiresAt: number }>()
   const activity = Effect.fn('activity')(function* (checkoutId: string, id: string) {
     const current = live.get(`${checkoutId}/${id}`)
@@ -73,20 +86,25 @@ const createService = Effect.gen(function* () {
       let id = nanoid()
       const ids = new Set((yield* storage.taskFiles(entry.path)).map(file => file.slice(0, -5)))
       while (ids.has(id)) id = nanoid()
-      const task: S.Task = { schemaVersion: 1, id, title: input.title, description: input.description ?? '', stage: 'planning', status: 'queued', revision: 1, createdAt: now, updatedAt: now, todos: (input.todos ?? []).map(todo => ({ ...todo, id: nanoid(), status: 'pending' as const })), findings: [], notes: [], history: [{ id: nanoid(), revision: 1, at: now, changes: ['Task created'] }] }
+      const parentId = yield* validateParent(entry, id, input.parentId ?? null)
+      const task: S.Task = { schemaVersion: 1, id, parentId, title: input.title, description: input.description ?? '', stage: 'planning', status: 'queued', revision: 1, createdAt: now, updatedAt: now, todos: (input.todos ?? []).map(todo => ({ ...todo, id: nanoid(), status: 'pending' as const })), findings: [], notes: [], history: [{ id: nanoid(), revision: 1, at: now, changes: ['Task created'] }] }
       yield* decode(S.Task, task)
       yield* storage.write(join(entry.path, '.agent-work/tasks', `${id}.json`), task)
-      return { id, ref: shortRef(id, [...ids].map(id => ({ id }))), revision: 1, todos: task.todos.map(todo => ({ id: todo.id, ref: shortRef(todo.id, task.todos), ...(input.verbose ? { title: todo.title } : {}) })), url: `/checkouts/${entry.id}/tasks/${id}` }
+      return { id, ref: shortRef(id, [...ids].map(id => ({ id }))), parentId: parentId ?? null, revision: 1, todos: task.todos.map(todo => ({ id: todo.id, ref: shortRef(todo.id, task.todos), ...(input.verbose ? { title: todo.title } : {}) })), url: `/checkouts/${entry.id}/tasks/${id}` }
     }))
   })
   const list = Effect.fn('task.list')(function* (raw: unknown) {
     const input = yield* decode(S.ListInput, raw)
     const entry = yield* checkout(input.checkoutId)
-    const all = yield* Effect.forEach(yield* storage.taskFiles(entry.path), file => readTask(entry, file.slice(0, -5)))
-    const filtered = all.filter(task => (!input.status || task.status === input.status) && (!input.stage || task.stage === input.stage) && (!input.query || `${task.title} ${task.description}`.toLowerCase().includes(input.query.toLowerCase()))).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt) || a.id.localeCompare(b.id))
+    const all = yield* allTasks(entry)
+    const graph = hierarchy(all)
+    const ancestors = yield* Effect.try({ try: () => new Map(all.map(task => [task.id, graph.ancestors(task.id)])), catch: error => error as S.SdsError })
+    const parentId = input.parentId == null ? input.parentId : (yield* resolveRef(all, input.parentId)).id
+    if (input.recursive && typeof parentId !== 'string') return yield* failure('INVALID_INPUT', 'recursive requires a parentId task reference')
+    const filtered = all.filter(task => (parentId === undefined || (input.recursive ? ancestors.get(task.id)!.some(parent => parent.id === parentId) : (task.parentId ?? null) === parentId)) && (!input.status || task.status === input.status) && (!input.stage || task.stage === input.stage) && (!input.query || `${task.title} ${task.description}`.toLowerCase().includes(input.query.toLowerCase()))).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt) || a.id.localeCompare(b.id))
     const offset = input.offset ?? 0, limit = input.limit ?? 50
     const items = yield* Effect.forEach(filtered.slice(offset, offset + limit), task => Effect.gen(function* () {
-      return { id: task.id, ref: shortRef(task.id, all), title: task.title, stage: task.stage, status: task.status, revision: task.revision, updatedAt: task.updatedAt, todoCount: task.todos.filter(todo => todo.status !== 'cancelled').length, completedTodos: task.todos.filter(todo => todo.status === 'done').length, openFindings: task.findings.filter(finding => finding.status === 'open').length, activity: yield* activity(entry.id, task.id) }
+      return { parentId: task.parentId ?? null, subtaskCount: graph.children.get(task.id)?.length ?? 0, id: task.id, ref: shortRef(task.id, all), title: task.title, stage: task.stage, status: task.status, revision: task.revision, updatedAt: task.updatedAt, todoCount: task.todos.filter(todo => todo.status !== 'cancelled').length, completedTodos: task.todos.filter(todo => todo.status === 'done').length, openFindings: task.findings.filter(finding => finding.status === 'open').length, activity: yield* activity(entry.id, task.id) }
     }))
     return { items, total: filtered.length, nextOffset: offset + limit < filtered.length ? offset + limit : null }
   })
@@ -99,7 +117,10 @@ const createService = Effect.gen(function* () {
       const history = [...task.history].reverse()
       return { id: task.id, revision: task.revision, items: history.slice(offset, offset + limit), total: history.length, nextOffset: offset + limit < history.length ? offset + limit : null }
     }
-    const enriched = { ...task, todos: task.todos.map(todo => ({ ...todo, ref: shortRef(todo.id, task.todos) })), findings: task.findings.map(finding => ({ ...finding, ref: shortRef(finding.id, task.findings) })), activity: yield* activity(entry.id, task.id) }
+    const all = yield* allTasks(entry)
+    const graph = hierarchy(all)
+    const ancestors = yield* Effect.try({ try: () => graph.ancestors(task.id).map(parent => brief(parent, all)), catch: error => error as S.SdsError })
+    const enriched = { ...task, ancestors, subtaskCount: graph.children.get(task.id)?.length ?? 0, todos: task.todos.map(todo => ({ ...todo, ref: shortRef(todo.id, task.todos) })), findings: task.findings.map(finding => ({ ...finding, ref: shortRef(finding.id, task.findings) })), activity: yield* activity(entry.id, task.id) }
     if (input.view === 'full') return enriched
     const { history, notes, ...working } = enriched
     return { ...working, todos: working.todos.filter(todo => todo.status === 'pending'), findings: working.findings.filter(finding => finding.status === 'open'), notes: notes.slice(-3), historyCount: history.length }
@@ -109,7 +130,7 @@ const createService = Effect.gen(function* () {
     const entry = yield* checkout(input.checkoutId)
     const id = yield* taskId(entry, input.taskId)
     const file = join(entry.path, '.agent-work/tasks', `${id}.json`)
-    return yield* storage.lock(file, Effect.gen(function* () {
+    const mutation = storage.lock(file, Effect.gen(function* () {
       const task = yield* readTask(entry, id)
       if (task.revision !== input.expectedRevision) return yield* failure('CONFLICT', `Expected revision ${input.expectedRevision}, current revision is ${task.revision}. Read the task before retrying.`)
       let next = { ...task, todos: [...task.todos], findings: [...task.findings], notes: [...task.notes], history: [...task.history] }
@@ -118,6 +139,7 @@ const createService = Effect.gen(function* () {
       const added: { type: string; id: string; ref: string }[] = []
       for (const op of input.operations) {
         switch (op.type) {
+          case 'parent.set': next.parentId = yield* validateParent(entry, id, op.parentId); changes.push(next.parentId ? `Parent: ${next.parentId}` : 'Moved to top level'); break
           case 'title.set': next.title = op.title; changes.push('Title updated'); break
           case 'description.set': next.description = op.description; changes.push('Description updated'); break
           case 'stage.set': next.stage = op.stage; changes.push(`Stage: ${op.stage}`); break
@@ -156,8 +178,13 @@ const createService = Effect.gen(function* () {
       next.history.push({ id: nanoid(), revision: next.revision, at: now, changes })
       yield* decode(S.Task, next)
       yield* storage.write(file, next)
-      return { id, revision: next.revision, operationCount: input.operations.length, changeCount: changes.length, ...(input.verbose ? { changes } : {}), added: added.map(item => ({ ...item, ref: shortRef(item.id, item.type === 'todo' ? next.todos : next.findings) })) }
+      return { id, parentId: next.parentId ?? null, revision: next.revision, operationCount: input.operations.length, changeCount: changes.length, ...(input.verbose ? { changes } : {}), added: added.map(item => ({ ...item, ref: shortRef(item.id, item.type === 'todo' ? next.todos : next.findings) })) }
     }))
+    // All hierarchy mutations share the create lock. Acquire it before task locks
+    // so simultaneous A→B and B→A moves cannot both pass cycle validation.
+    return yield* input.operations.some(op => op.type === 'parent.set')
+      ? storage.lock(join(entry.path, '.agent-work/tasks'), mutation)
+      : mutation
   })
   const outcome = <A>(taskId: string, effect: Effect.Effect<A, S.SdsError>) => effect.pipe(Effect.match({
     onSuccess: data => ({ taskId, ok: true as const, data }),

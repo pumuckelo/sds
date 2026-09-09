@@ -108,3 +108,26 @@ test('two agents hand off planning, blocked implementation, review findings, and
     expect(page.structuredContent).toMatchObject({ total: 1, nextOffset: null })
   } finally { await Promise.all(clients.map(client => client.close())) }
 })
+
+test('MCP and HTTP share recursive parent creation, ancestry and reparenting', async () => {
+  const client = new Client({ name: 'hierarchy', version: '1' })
+  await client.connect(new StreamableHTTPClientTransport(new URL('http://127.0.0.1:4317/mcp'), { fetch: async (input, init) => service.app.fetch(new Request(input, init)) }))
+  try {
+    const checkout = await (await request('/api/checkouts', { path: join(root, 'repo') })).json()
+    const checkoutId = checkout.id
+    const parent = await (await request('/api/tasks/create', { checkoutId, title: 'Parent' })).json()
+    const childResult = await client.callTool({ name: 'task_create', arguments: { checkoutId, title: 'Child', parentId: parent.ref } })
+    expect(childResult.isError).toBe(false)
+    const child = childResult.structuredContent as { id: string }
+    const nested = await (await request('/api/tasks/create', { checkoutId, title: 'Nested', parentId: child.id })).json()
+    const listed = await client.callTool({ name: 'task_list', arguments: { checkoutId, parentId: parent.id, recursive: true } })
+    expect(listed.structuredContent).toMatchObject({ total: 2 })
+    const cycle = await request('/api/tasks/update', { checkoutId, taskId: parent.id, expectedRevision: 1, operations: [{ type: 'parent.set', parentId: nested.id }] })
+    expect(cycle.status).toBe(400)
+    const moved = await client.callTool({ name: 'task_update', arguments: { checkoutId, taskId: child.id, expectedRevision: 1, operations: [{ type: 'parent.set', parentId: null }] } })
+    expect(moved.isError).toBe(false)
+    expect(await (await request('/api/tasks/get', { checkoutId, taskId: nested.id })).json()).toMatchObject({ ancestors: [{ id: child.id }] })
+    const schema = await client.listTools()
+    expect(schema.tools.find(tool => tool.name === 'task_create')!.inputSchema.properties).toHaveProperty('parentId')
+  } finally { await client.close() }
+})

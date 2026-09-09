@@ -1,0 +1,87 @@
+{
+  "schemaVersion": 1,
+  "id": "BgkGQPr6Uqzt8AzbxGUOo",
+  "title": "Add recursive subtasks",
+  "description": "Support parent/child task relationships at arbitrary depth, with cycle-safe reparenting, shared CLI/HTTP/MCP contracts and hierarchy UI. Preserve existing tasks and explicit revision checks.",
+  "stage": "reviewing",
+  "status": "done",
+  "revision": 4,
+  "createdAt": "2026-09-09T07:04:17.602Z",
+  "updatedAt": "2026-09-09T07:15:28.560Z",
+  "todos": [
+    {
+      "id": "FuMqiFdXIG3Syo2qzUI9u",
+      "title": "Implement parent relationships and concurrency-safe cycle validation",
+      "status": "done"
+    },
+    {
+      "id": "5FQBVRGKLGPksXcQw0CTz",
+      "title": "Expose create, move, and hierarchy queries through CLI and APIs",
+      "status": "done"
+    },
+    {
+      "id": "BilvKyEGBxnP4RlIQUPDE",
+      "title": "Add task hierarchy and subtask management to dashboard",
+      "status": "done"
+    },
+    {
+      "id": "cPnBYiaOOdH7yeo9QutSX",
+      "title": "Test recursive workflows and document recommended depth",
+      "status": "done"
+    }
+  ],
+  "findings": [],
+  "notes": [
+    {
+      "id": "oTcXq5whATTzcRgTc3n89",
+      "text": "Implemented recursive hierarchy in core, CLI, HTTP/MCP, and dashboard. All 27 tests pass (241 assertions), including cross-runtime cycle races and subtree moves; production build passes. Completing documentation and UI verification.",
+      "createdAt": "2026-09-09T07:12:25.475Z"
+    },
+    {
+      "id": "evDYO2IFgSriQ_o3PhJAE",
+      "text": "Completed README and both installed skill updates (validated). Isolated browser checks passed: create child, detach through parent picker, live CLI reparent update, hierarchy collapse. 27 tests / 241 assertions and production build passed. Refreshed main SDS dashboard; stopped isolated preview server.",
+      "createdAt": "2026-09-09T07:15:28.560Z"
+    }
+  ],
+  "history": [
+    {
+      "id": "682nMcRHP-6v8YRfscbap",
+      "revision": 1,
+      "at": "2026-09-09T07:04:17.602Z",
+      "changes": [
+        "Task created"
+      ]
+    },
+    {
+      "id": "sBB23N-ug52qTeOQ884KK",
+      "revision": 2,
+      "at": "2026-09-09T07:04:35.526Z",
+      "changes": [
+        "Status: active",
+        "Stage: implementing"
+      ]
+    },
+    {
+      "id": "mONILShlXKmexPUQJP0UU",
+      "revision": 3,
+      "at": "2026-09-09T07:12:25.475Z",
+      "changes": [
+        "Todo completed: Implement parent relationships and concurrency-safe cycle validation",
+        "Todo completed: Expose create, move, and hierarchy queries through CLI and APIs",
+        "Todo completed: Add task hierarchy and subtask management to dashboard",
+        "Stage: reviewing",
+        "Progress note added"
+      ]
+    },
+    {
+      "id": "rg5dIKDsou6-Ov5WgG4Kv",
+      "revision": 4,
+      "at": "2026-09-09T07:15:28.560Z",
+      "changes": [
+        "Todo completed: Test recursive workflows and document recommended depth",
+        "Progress note added",
+        "Status: done"
+      ]
+    }
+  ]
+}

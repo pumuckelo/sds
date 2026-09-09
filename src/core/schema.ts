@@ -19,7 +19,7 @@ export const Finding = Schema.Struct({
 export const Note = Schema.Struct({ id: Id, text: Text, createdAt: Timestamp })
 export const Event = Schema.Struct({ id: Id, revision: Revision, at: Timestamp, changes: Schema.Array(Schema.String) })
 export const Task = Schema.Struct({
-  schemaVersion: Schema.Literal(1), id: Id, title: Title, description: Text,
+  schemaVersion: Schema.Literal(1), id: Id, title: Title, description: Text, parentId: Schema.optional(Id),
   stage: Stage, status: Status, blocker: Schema.optional(Text), revision: Revision,
   createdAt: Timestamp, updatedAt: Timestamp, todos: Schema.Array(Todo), findings: Schema.Array(Finding),
   notes: Schema.Array(Note), history: Schema.Array(Event),
@@ -34,10 +34,11 @@ export const Registry = Schema.Struct({ schemaVersion: Schema.Literal(1), checko
 
 export const RegisterInput = Schema.Struct({ path: Schema.NonEmptyString, name: Schema.optional(Title) })
 export const CreateInput = Schema.Struct({
-  checkoutId: Ref, title: Title, description: Schema.optional(Text), verbose: Schema.optional(Schema.Boolean),
+  checkoutId: Ref, title: Title, description: Schema.optional(Text), parentId: Schema.optional(Ref), verbose: Schema.optional(Schema.Boolean),
   todos: Schema.optional(Schema.Array(Schema.Struct({ title: Title, stage: Schema.optional(Stage) })).check(Schema.isMaxLength(200))),
 })
 export const Operation = Schema.Union([
+  Schema.Struct({ type: Schema.Literal('parent.set'), parentId: Schema.NullOr(Ref) }),
   Schema.Struct({ type: Schema.Literal('title.set'), title: Title }),
   Schema.Struct({ type: Schema.Literal('description.set'), description: Text }),
   Schema.Struct({ type: Schema.Literal('stage.set'), stage: Stage }),
@@ -51,7 +52,7 @@ export const Operation = Schema.Union([
 ])
 export const UpdateInput = Schema.Struct({ checkoutId: Ref, taskId: Ref, expectedRevision: Revision, verbose: Schema.optional(Schema.Boolean), operations: Schema.Array(Operation).check(Schema.isMinLength(1), Schema.isMaxLength(200)) })
 export const GetInput = Schema.Struct({ checkoutId: Ref, taskId: Ref, view: Schema.optional(Schema.Literals(['working', 'full', 'history'])), offset: Schema.optional(Schema.Int.check(Schema.isGreaterThanOrEqualTo(0))), limit: Schema.optional(Schema.Int.check(Schema.isGreaterThanOrEqualTo(1), Schema.isLessThanOrEqualTo(100))) })
-export const ListInput = Schema.Struct({ checkoutId: Ref, status: Schema.optional(Status), stage: Schema.optional(Stage), query: Schema.optional(Title), offset: Schema.optional(Schema.Int.check(Schema.isGreaterThanOrEqualTo(0))), limit: Schema.optional(Schema.Int.check(Schema.isGreaterThanOrEqualTo(1), Schema.isLessThanOrEqualTo(100))) })
+export const ListInput = Schema.Struct({ checkoutId: Ref, parentId: Schema.optional(Schema.NullOr(Ref)), recursive: Schema.optional(Schema.Boolean), status: Schema.optional(Status), stage: Schema.optional(Stage), query: Schema.optional(Title), offset: Schema.optional(Schema.Int.check(Schema.isGreaterThanOrEqualTo(0))), limit: Schema.optional(Schema.Int.check(Schema.isGreaterThanOrEqualTo(1), Schema.isLessThanOrEqualTo(100))) })
 export const HeartbeatInput = Schema.Struct({ checkoutId: Ref, taskId: Ref, agent: Title, running: Schema.Boolean })
 export class SdsError extends Schema.TaggedError<SdsError>()('SdsError', {
   code: Schema.Literals(['INVALID_INPUT', 'NOT_FOUND', 'AMBIGUOUS_REF', 'CONFLICT', 'BUSY', 'STORAGE_ERROR']),

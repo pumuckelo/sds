@@ -155,3 +155,22 @@ test('invalid state directory errors identify the path and configuration remedie
   expect(error.message).toContain('--state-dir')
   expect(error.message).toContain('SDS_STATE_DIR')
 })
+
+test('CLI creates nested tasks, lists descendants and moves branches with revision checks', async () => {
+  await success(['init']); const rootTask = await create()
+  const child = await success<Created>(['task', 'create', 'Child', '--parent', rootTask.ref])
+  const grandchild = await success<Created>(['task', 'create', '--stdin'], { stdin: JSON.stringify({ title: 'Grandchild', parentId: child.ref }) })
+  const view = await success<{ parentId: string; ancestors: { id: string }[] }>(['task', 'get', grandchild.ref])
+  expect(view.parentId).toBe(child.id); expect(view.ancestors.map(task => task.id)).toEqual([rootTask.id, child.id])
+  expect(await success(['task', 'list', '--parent', rootTask.ref, '--recursive'])).toMatchObject({ total: 2 })
+  expect(await success(['task', 'list', '--roots'])).toMatchObject({ total: 1 })
+  const invalid = await command(['task', 'move', rootTask.ref, '--parent', grandchild.ref, '--revision', '1'])
+  expect(invalid.code).toBe(2)
+  await success(['task', 'move', child.ref, '--root', '--revision', '1'])
+  expect(await success(['task', 'list', '--roots'])).toMatchObject({ total: 2 })
+  expect(await success(['task', 'get', grandchild.ref])).toMatchObject({ ancestors: [{ id: child.id }] })
+  await success(['task', 'move', child.ref, '--parent', rootTask.ref, '--revision', '2'])
+  for (const args of [['task', 'move', child.ref, '--revision', '3'], ['task', 'list', '--roots', '--parent', rootTask.ref], ['task', 'list', '--recursive']]) {
+    const result = await command(args); expect(result.code).toBe(2); expect(result.stdout).toBe('')
+  }
+})

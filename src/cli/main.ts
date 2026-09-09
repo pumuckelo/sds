@@ -60,7 +60,7 @@ const inputJson = Effect.fn('cli.inputJson')(function* (stdin: boolean, json: Op
   const text = Option.isSome(json) ? json.value : yield* io('Read stdin', () => Bun.stdin.text())
   return yield* Effect.try({ try: () => JSON.parse(text) as unknown, catch: () => failure('INVALID_INPUT', 'Input must be valid JSON') })
 })
-const CreateBody = Schema.Struct({ title: S.Title, description: Schema.optional(S.Text), todos: S.CreateInput.fields.todos })
+const CreateBody = Schema.Struct({ parentId: S.CreateInput.fields.parentId, title: S.Title, description: Schema.optional(S.Text), todos: S.CreateInput.fields.todos })
 const UpdateBody = Schema.Struct({ expectedRevision: Schema.optional(S.Revision), operations: S.UpdateInput.fields.operations })
 const updateTask = Effect.fn('cli.updateTask')(function* (taskId: string, expectedRevision: number, operations: readonly (typeof S.Operation.Type)[]) {
   const { verbose } = yield* root
@@ -79,14 +79,16 @@ const init = Command.make('init', { path: Argument.string('path').pipe(Argument.
 const checkout = Command.make('checkout').pipe(Command.withSubcommands([
   Command.make('list', {}, Effect.fn('cli.checkouts')(function* () { yield* print({ items: yield* withTasks(tasks => tasks.checkouts()) }) })),
 ]))
-const create = Command.make('create', { title: Argument.string('title').pipe(Argument.optional), description: textFlag('description'), stdin: stdinFlag, json: jsonFlag }, Effect.fn('cli.create')(function* ({ title, description, stdin, json }) {
-  if ((stdin || Option.isSome(json)) && (Option.isSome(title) || Option.isSome(description))) return yield* failure('INVALID_INPUT', 'Use JSON input or title/description arguments, not both')
-  const body = yield* decode(CreateBody, (stdin || Option.isSome(json)) ? yield* inputJson(stdin, json) : { title: Option.getOrUndefined(title), description: Option.getOrUndefined(description) })
+const create = Command.make('create', { parent: textFlag('parent'), title: Argument.string('title').pipe(Argument.optional), description: textFlag('description'), stdin: stdinFlag, json: jsonFlag }, Effect.fn('cli.create')(function* ({ parent, title, description, stdin, json }) {
+  if ((stdin || Option.isSome(json)) && (Option.isSome(title) || Option.isSome(description) || Option.isSome(parent))) return yield* failure('INVALID_INPUT', 'Use JSON input or title/description arguments, not both')
+  const body = yield* decode(CreateBody, (stdin || Option.isSome(json)) ? yield* inputJson(stdin, json) : { parentId: Option.getOrUndefined(parent), title: Option.getOrUndefined(title), description: Option.getOrUndefined(description) })
   const { verbose } = yield* root
   yield* print(yield* withTasks((tasks, project) => Effect.gen(function* () { return yield* tasks.create({ ...body, verbose, checkoutId: yield* checkoutId(tasks, project) }) })))
 })).pipe(Command.withDescription('Create a task; --json or --stdin can include initial todos'))
-const list = Command.make('list', { status: textFlag('status'), stage: textFlag('stage'), query: textFlag('query'), offset: Flag.integer('offset').pipe(Flag.optional), limit: Flag.integer('limit').pipe(Flag.optional) }, Effect.fn('cli.list')(function* (options) {
-  const body = Object.fromEntries(Object.entries(options).flatMap(([key, value]) => Option.isSome<string | number>(value) ? [[key, value.value]] : []))
+const list = Command.make('list', { parent: textFlag('parent'), roots: Flag.boolean('roots').pipe(Flag.withDefault(false)), recursive: Flag.boolean('recursive').pipe(Flag.withDefault(false)), status: textFlag('status'), stage: textFlag('stage'), query: textFlag('query'), offset: Flag.integer('offset').pipe(Flag.optional), limit: Flag.integer('limit').pipe(Flag.optional) }, Effect.fn('cli.list')(function* (options) {
+  if (options.roots && Option.isSome(options.parent)) return yield* failure('INVALID_INPUT', 'Use --roots or --parent, not both')
+  const { parent, roots, recursive, ...filters } = options
+  const body = { parentId: roots ? null : Option.getOrUndefined(parent), recursive, ...Object.fromEntries(Object.entries(filters).flatMap(([key, value]) => Option.isSome<string | number>(value) ? [[key, value.value]] : [])) }
   yield* print(yield* withTasks((tasks, project) => Effect.gen(function* () { return yield* tasks.list({ ...body, checkoutId: yield* checkoutId(tasks, project) }) })))
 }))
 const get = Command.make('get', { task: taskArg, view: textFlag('view'), offset: Flag.integer('offset').pipe(Flag.optional), limit: Flag.integer('limit').pipe(Flag.optional) }, Effect.fn('cli.get')(function* (options) {
@@ -112,6 +114,10 @@ const updateMany = Command.make('update-many', { stdin: stdinFlag, json: jsonFla
   const { verbose } = yield* root
   yield* printBatch(yield* withTasks((tasks, project) => Effect.gen(function* () { return yield* tasks.updateMany({ ...body, verbose: verbose || body.verbose, checkoutId: yield* checkoutId(tasks, project) }) })))
 })).pipe(Command.withDescription('Update tasks sequentially, each with its own revision; partial failures exit 1 with all outcomes on stdout'))
+const move = Command.make('move', { task: taskArg, parent: textFlag('parent'), root: Flag.boolean('root').pipe(Flag.withDefault(false)), revision: revisionFlag }, Effect.fn('cli.move')(function* (options) {
+  if (options.root === Option.isSome(options.parent)) return yield* failure('INVALID_INPUT', 'Supply either --parent TASK or --root')
+  yield* updateTask(options.task, options.revision, [{ type: 'parent.set', parentId: options.root ? null : Option.getOrThrow(options.parent) }])
+})).pipe(Command.withDescription('Move a task and its descendants beneath a parent, or detach to top level'))
 const stage = Command.make('stage', { task: taskArg, stage: Argument.withSchema(Argument.string('stage'), S.Stage), revision: revisionFlag }, Effect.fn('cli.stage')(function* (options) {
   yield* updateTask(options.task, options.revision, [{ type: 'stage.set', stage: options.stage }])
 }))
@@ -136,7 +142,7 @@ const schema = Command.make('schema', { name: Argument.withSchema(Argument.strin
   const document = Schema.toJsonSchemaDocument(schemas[name])
   yield* print({ ...document.schema, $defs: document.definitions })
 })).pipe(Command.withDescription('Print a JSON input schema without loading every operation into context'))
-const cli = root.pipe(Command.withSubcommands([init, checkout, Command.make('task').pipe(Command.withSubcommands([create, list, get, getMany, update, updateMany, stage, status])), todo, note, schema]))
+const cli = root.pipe(Command.withSubcommands([init, checkout, Command.make('task').pipe(Command.withSubcommands([create, list, get, getMany, update, updateMany, move, stage, status])), todo, note, schema]))
 
 // Buffer parser help so failed commands leave stdout empty for agent callers.
 const output: string[] = []

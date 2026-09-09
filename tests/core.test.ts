@@ -114,3 +114,61 @@ describe('repository operations', () => {
     expect(await call(service => service.get({ checkoutId, taskId: task.id }))).toMatchObject({ ok: false, error: { code: 'STORAGE_ERROR' } })
   })
 })
+
+test('recursive subtasks retain independent state and support branch moves and detach', async () => {
+  const top = await create()
+  let parent = top.id
+  const descendants: string[] = []
+  for (let depth = 0; depth < 6; depth++) {
+    const child = await call(service => service.create({ checkoutId, parentId: parent.slice(0, 6), title: `Depth ${depth + 1}` }))
+    if (!child.ok) throw child.error
+    expect(child.data.parentId).toBe(parent)
+    descendants.push(child.data.id); parent = child.data.id
+  }
+  const view = await call(service => service.get({ checkoutId, taskId: parent }))
+  expect(view).toMatchObject({ ok: true, data: { parentId: descendants[4], ancestors: [{ id: top.id }, ...descendants.slice(0, -1).map(id => ({ id }))] } })
+  const direct = await call(service => service.list({ checkoutId, parentId: top.ref }))
+  expect(direct.ok && direct.data.items.map(task => task.id)).toEqual([descendants[0]!])
+  const recursive = await call(service => service.list({ checkoutId, parentId: top.ref, recursive: true, limit: 2 }))
+  expect(recursive).toMatchObject({ ok: true, data: { total: 6, nextOffset: 2 } })
+  const root = await call(service => service.list({ checkoutId, parentId: null }))
+  expect(root.ok && root.data.items.map(task => task.id)).toEqual([top.id])
+  const invalid = await call(service => service.update({ checkoutId, taskId: top.id, expectedRevision: 1, operations: [{ type: 'title.set', title: 'Should roll back' }, { type: 'parent.set', parentId: parent }] }))
+  expect(invalid).toMatchObject({ ok: false, error: { code: 'INVALID_INPUT' } })
+  expect((await stored(top.id)).title).toBe('Ship reset flow')
+  const moved = await call(service => service.update({ checkoutId, taskId: descendants[0], expectedRevision: 1, operations: [{ type: 'parent.set', parentId: null }, { type: 'status.set', status: 'done' }] }))
+  expect(moved).toMatchObject({ ok: true, data: { parentId: null, revision: 2 } })
+  expect((await stored(top.id)).revision).toBe(1)
+  expect((await stored(descendants[1]!)).status).toBe('queued')
+  const detached = await call(service => service.get({ checkoutId, taskId: parent }))
+  expect(detached.ok && 'ancestors' in detached.data && detached.data.ancestors.map(task => task.id)).toEqual(descendants.slice(0, -1))
+  expect(await call(service => service.update({ checkoutId, taskId: descendants[0], expectedRevision: 1, operations: [{ type: 'parent.set', parentId: top.id }] }))).toMatchObject({ ok: false, error: { code: 'CONFLICT' } })
+})
+
+test('concurrent opposite parent moves cannot create a cycle across runtimes', async () => {
+  const a = await create(), b = await create()
+  const otherRuntime = createRuntime(join(root, 'state'))
+  try {
+    const updates = await Promise.all([
+      call(service => service.update({ checkoutId, taskId: a.id, expectedRevision: 1, operations: [{ type: 'parent.set', parentId: b.id }] })),
+      run(otherRuntime, Tasks.use(service => service.update({ checkoutId, taskId: b.id, expectedRevision: 1, operations: [{ type: 'parent.set', parentId: a.id }] }))),
+    ])
+    expect(updates.filter(result => result.ok)).toHaveLength(1)
+    expect(updates.filter(result => !result.ok)).toMatchObject([{ ok: false, error: { code: 'INVALID_INPUT' } }])
+    expect(await call(service => service.list({ checkoutId }))).toMatchObject({ ok: true, data: { total: 2 } })
+  } finally { await otherRuntime.dispose() }
+})
+
+test('parent refs stay in checkout; invalid graph imported from files is reported and can be detached', async () => {
+  const parent = await create()
+  const otherPath = join(root, 'other'); await mkdir(otherPath)
+  const other = await call(service => service.register({ path: otherPath })); if (!other.ok) throw other.error
+  expect(await call(service => service.create({ checkoutId: other.data.id, parentId: parent.id, title: 'Wrong checkout' }))).toMatchObject({ ok: false, error: { code: 'NOT_FOUND' } })
+  expect(await call(service => service.update({ checkoutId, taskId: parent.id, expectedRevision: 1, operations: [{ type: 'parent.set', parentId: parent.ref }] }))).toMatchObject({ ok: false, error: { code: 'INVALID_INPUT' } })
+  const original = await stored(parent.id)
+  await writeFile(join(path, '.agent-work/tasks', `${parent.id}.json`), JSON.stringify({ ...original, parentId: parent.id }))
+  expect(await call(service => service.list({ checkoutId }))).toMatchObject({ ok: false, error: { code: 'CONFLICT' } })
+  expect(await call(service => service.get({ checkoutId, taskId: parent.id }))).toMatchObject({ ok: false, error: { code: 'CONFLICT' } })
+  expect(await call(service => service.update({ checkoutId, taskId: parent.id, expectedRevision: 1, operations: [{ type: 'parent.set', parentId: null }] }))).toMatchObject({ ok: true })
+  expect(await call(service => service.list({ checkoutId }))).toMatchObject({ ok: true })
+})

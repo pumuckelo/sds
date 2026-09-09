@@ -1,7 +1,7 @@
 import type { Task, Operation } from '../core/schema'
 import type { TaskList, CheckoutList } from '../core/service'
 export type CheckoutView = CheckoutList[number] & { branch: string | null }
-export type TaskView = Task & { activity: { running: boolean; agent?: string; seenAt?: string } }
+export type TaskView = Task & { ancestors: { id: string; ref: string; title: string; stage: string; status: string }[]; subtaskCount: number; activity: { running: boolean; agent?: string; seenAt?: string } }
 export type Op = typeof Operation.Type
 export type { TaskList }
 export async function api<T>(path: string, body?: unknown, signal?: AbortSignal): Promise<T> {
