@@ -1,6 +1,10 @@
 # SDS
 
+[![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?style=flat-square&logo=typescript&logoColor=white)](https://www.typescriptlang.org/) [![Bun](https://img.shields.io/badge/Bun-282828?style=flat-square&logo=bun&logoColor=white)](https://bun.sh/) [![React](https://img.shields.io/badge/React-282828?style=flat-square&logo=react&logoColor=61DAFB)](https://react.dev/) [![Downloads](https://img.shields.io/badge/macOS%20%7C%20Linux-downloads-525252?style=flat-square)](https://github.com/pumuckelo/sds/releases)
+
 Local task management for agents and humans. Track work through the CLI or web dashboard, with tasks stored in `.agent-work/` alongside your code.
+
+![CLI and dashboard → tasks and subtasks → repository-owned files](docs/assets/overview.svg)
 
 ## Install
 
