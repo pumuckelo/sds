@@ -1,0 +1,41 @@
+{
+  "schemaVersion": 1,
+  "id": "DHojnqPic6QVe7UMAvSx_",
+  "title": "Make bridge and SDS READMEs CLI-first",
+  "description": "Reorder install and usage, move optional MCP to the bottom, and correct stale workflow and UI documentation.",
+  "dependencyIds": [],
+  "stage": "reviewing",
+  "status": "done",
+  "revision": 2,
+  "createdAt": "2026-09-09T09:34:10.682Z",
+  "updatedAt": "2026-09-09T09:36:52.867Z",
+  "todos": [],
+  "findings": [],
+  "notes": [
+    {
+      "id": "WYFCn6-BdY5VIL2IpGfBW",
+      "text": "Reorganized both READMEs around installation and CLI quickstart, moved optional MCP setup to the end. Bridge now documents native TS setup early, default-apply rename, guarded five-minute caches, workspace lifecycle, concise unified Zed setup and sandbox errors. SDS now correctly documents Kanban default, themes, breadcrumbs/back, copy IDs and dependency links; removed stale initial-commit statement. Checked source entry points, JSON examples, local links and diff whitespace. Documentation-only; no runtime changes or computer use.",
+      "createdAt": "2026-09-09T09:36:52.867Z"
+    }
+  ],
+  "history": [
+    {
+      "id": "Vj0UxWbWLdjE0b-O0ew3N",
+      "revision": 1,
+      "at": "2026-09-09T09:34:10.682Z",
+      "changes": [
+        "Task created"
+      ]
+    },
+    {
+      "id": "tetxnHab_UgFgg5NsHbAn",
+      "revision": 2,
+      "at": "2026-09-09T09:36:52.867Z",
+      "changes": [
+        "Stage: reviewing",
+        "Progress note added",
+        "Status: done"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,42 @@
+{
+  "schemaVersion": 1,
+  "id": "0QAkxxxRb6hCWjCmiyoRR",
+  "title": "Add copy task IDs to board and task details",
+  "description": "Copy the full task ID beside its short reference without navigating; show success or failure.",
+  "dependencyIds": [],
+  "stage": "reviewing",
+  "status": "done",
+  "revision": 2,
+  "createdAt": "2026-09-09T09:31:21.029Z",
+  "updatedAt": "2026-09-09T09:31:45.740Z",
+  "todos": [],
+  "findings": [],
+  "notes": [
+    {
+      "id": "lewHLbuwVrd8Yhn6rL7Fr",
+      "text": "Shared CopyTaskId button copies the full ID, stops click propagation, announces success and shows failures. Board cards use article containers and keyboard-accessible title buttons to avoid nested buttons. Detail header includes the same control beside its ID. TypeScript and production builds pass; diff check clean. No computer use.",
+      "createdAt": "2026-09-09T09:31:45.740Z"
+    }
+  ],
+  "history": [
+    {
+      "id": "I9urVO7OpcokmvmNyEmFN",
+      "revision": 1,
+      "at": "2026-09-09T09:31:21.029Z",
+      "changes": [
+        "Task created"
+      ]
+    },
+    {
+      "id": "KqafV8Bvcnc8zz_tOamU4",
+      "revision": 2,
+      "at": "2026-09-09T09:31:45.740Z",
+      "changes": [
+        "Title updated",
+        "Stage: reviewing",
+        "Progress note added",
+        "Status: done"
+      ]
+    }
+  ]
+}

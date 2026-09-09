@@ -272,3 +272,7 @@
 .breadcrumbs button:hover { color: var(--primary); text-decoration: underline; }
 .breadcrumbs [aria-current=page] { color: var(--foreground); overflow-wrap: anywhere; }
 .topbar > div:last-child { flex-shrink: 0; }
+
+.task-card { cursor: pointer; }
+.task-title-button { text-align: left; font: inherit; color: inherit; }
+.task-title-button:focus-visible { outline: 2px solid var(--ring); outline-offset: 4px; border-radius: 2px; }
