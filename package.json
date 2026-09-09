@@ -10,7 +10,10 @@
     "build": "tsc --noEmit && vite build",
     "typecheck": "tsc --noEmit",
     "test": "bun test",
-    "cli": "bun run src/cli/main.ts"
+    "cli": "bun run src/cli/main.ts",
+    "release:tag": "sh scripts/release.sh tag",
+    "release:push": "sh scripts/release.sh push",
+    "release": "bun run release:tag && bun run release:push"
   },
   "dependencies": {
     "@base-ui/react": "^1.8.0",

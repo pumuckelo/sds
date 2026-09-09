@@ -233,8 +233,11 @@ Update the package version, commit and push the changes, then push a matching `v
 After committing the version and release changes, run from this repository (requires Bun):
 
 ```sh
-sh scripts/release.sh tag   # create an annotated tag from the committed package version
-sh scripts/release.sh push  # push only that tag to origin and trigger the release
+bun run release            # create the version tag and push it to GitHub
+
+# Or run the steps separately:
+bun run release:tag
+bun run release:push
 ```
 
 Tag creation requires a clean checkout. Repeating it is safe when the tag already points to the current commit; an existing tag is never moved. For subsequent releases, bump the package version first. The push command publishes the existing tag, even if your branch has newer commits.
