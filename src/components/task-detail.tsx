@@ -1,0 +1,69 @@
+import { useState } from 'react'
+import { ArrowLeft, CheckCheck, Plus, Pencil, CircleCheck, MessageSquare, GitCommitHorizontal, ShieldAlert, Circle } from 'lucide-react'
+import Markdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
+import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
+import { Checkbox } from '@/components/ui/checkbox'
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
+import { Field, FieldLabel, FieldSet, FieldLegend } from '@/components/ui/field'
+import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert'
+import { Empty, EmptyHeader, EmptyTitle, EmptyDescription, EmptyMedia } from '@/components/ui/empty'
+import { Separator } from '@/components/ui/separator'
+import { EditDialog, Choice } from './forms'
+import { api, humanize, timeAgo, type TaskView, type Op } from '@/lib/api'
+import { cn } from '@/lib/utils'
+
+const stages = ['planning', 'implementing', 'reviewing'] as const
+const statuses = ['queued', 'active', 'blocked', 'done', 'cancelled'] as const
+export function Prose({ children }: { children: string }) { return <div className="prose-sds"><Markdown remarkPlugins={[remarkGfm]} components={{ img: ({ alt }) => <span>[Image: {alt}]</span> }}>{children}</Markdown></div> }
+export function TaskDetail({ task, checkoutId, onBack, refresh }: { task: TaskView; checkoutId: string; onBack: () => void; refresh: () => void }) {
+  const [busy, setBusy] = useState(false), [error, setError] = useState(''), [dialog, setDialog] = useState<string | null>(null)
+  const [selected, setSelected] = useState<string[]>([])
+  const [historyCount, setHistoryCount] = useState(20)
+  const [draftRevision, setDraftRevision] = useState(task.revision)
+  const openDialog = (name: string) => { setDraftRevision(task.revision); setDialog(name) }
+  const mutate = async (operations: Op[], revision = task.revision) => {
+    setBusy(true); setError('')
+    try { await api('tasks/update', { checkoutId, taskId: task.id, expectedRevision: revision, operations }); refresh() }
+    catch (error) { const message = error instanceof Error ? error.message : 'Update failed'; setError(message); refresh(); throw error }
+    finally { setBusy(false) }
+  }
+  const apply = (operations: Op[]) => { void mutate(operations).catch(() => {}) }
+  const done = task.todos.filter(todo => todo.status === 'done').length
+  const activeTodos = task.todos.filter(todo => todo.status !== 'cancelled')
+  const pendingSelection = selected.filter(id => task.todos.some(todo => todo.id === id && todo.status === 'pending'))
+  const finding = task.findings.find(item => item.id === dialog)
+  return <section className="task-detail">
+    <div className="flex items-center justify-between gap-4"><Button variant="ghost" onClick={onBack}><ArrowLeft data-icon="inline-start" />All tasks</Button><span className="font-mono text-xs text-muted-foreground">{task.id.slice(0, 6)} · revision {task.revision}</span></div>
+    <div className="detail-heading"><div className="eyebrow">TASK BRIEF</div><h1>{task.title}</h1><div className="flex flex-wrap items-center gap-3"><Badge variant={task.status === 'blocked' ? 'destructive' : 'secondary'}>{humanize(task.status)}</Badge><span className="text-xs text-muted-foreground">Updated {timeAgo(task.updatedAt)}</span>{task.activity.running && <Badge><Circle data-icon="inline-start" />{task.activity.agent} is working</Badge>}</div></div>
+    {error && <Alert variant="destructive"><AlertTitle>Update not saved</AlertTitle><AlertDescription>{error}</AlertDescription></Alert>}
+    {task.blocker && <Alert><ShieldAlert /><AlertTitle>Waiting on a blocker</AlertTitle><AlertDescription>{task.blocker}</AlertDescription></Alert>}
+    <div className="workflow-strip">{stages.map((stage, index) => <div key={stage} className={cn('workflow-step', task.stage === stage && 'current')}><span>{String(index + 1).padStart(2, '0')}</span>{humanize(stage)}{task.stage === stage && <span className="ml-auto text-xs">Current</span>}</div>)}</div>
+    <div className="flex flex-wrap items-center gap-3"><span className="text-xs text-muted-foreground">Move to</span><Choice label="Task stage" value={task.stage} values={stages} disabled={busy} onChange={stage => apply([{ type: 'stage.set', stage: stage as typeof task.stage }])} /><Choice label="Task status" value={task.status} values={statuses} disabled={busy} onChange={status => status === 'blocked' ? openDialog('block') : apply([{ type: 'status.set', status: status as typeof task.status }])} /><Button variant="ghost" onClick={() => openDialog('edit')} disabled={busy}><Pencil data-icon="inline-start" />Edit brief</Button></div>
+    <Separator />
+    <Prose>{task.description || '*No description yet. Add a brief to give your agents context.*'}</Prose>
+    <Tabs defaultValue="todos" className="mt-4">
+      <TabsList variant="line"><TabsTrigger value="todos">Checklist <Badge variant="secondary">{done}/{activeTodos.length}</Badge></TabsTrigger><TabsTrigger value="findings">Review <Badge variant="secondary">{task.findings.filter(item => item.status === 'open').length}</Badge></TabsTrigger><TabsTrigger value="notes">Notes</TabsTrigger><TabsTrigger value="history">Activity</TabsTrigger></TabsList>
+      <TabsContent value="todos" className="pt-6">
+        <div className="section-heading"><div><h2>A clear path to done</h2><p>Small, actionable steps for this task.</p></div><Button variant="outline" onClick={() => openDialog('todo')}><Plus data-icon="inline-start" />Add todo</Button></div>
+        {pendingSelection.length > 0 && <div className="flex items-center justify-between gap-4 mb-4"><span className="text-sm">{pendingSelection.length} selected</span><Button disabled={busy} onClick={() => { void mutate([{ type: 'todo.complete', todoIds: pendingSelection }]).then(() => setSelected([])).catch(() => {}) }}><CheckCheck data-icon="inline-start" />Complete selected</Button></div>}
+        {task.todos.length === 0 ? <Empty><EmptyHeader><EmptyMedia variant="icon"><CircleCheck /></EmptyMedia><EmptyTitle>No todos yet</EmptyTitle><EmptyDescription>Add the first step, or let an agent plan the work.</EmptyDescription></EmptyHeader></Empty> : <FieldSet><FieldLegend className="sr-only">Task checklist</FieldLegend><div className="todo-list">{task.todos.map(todo => <div className="todo-row" key={todo.id}>
+          <Field orientation="horizontal"><Checkbox id={todo.id} aria-label={`Select ${todo.title}`} disabled={busy || todo.status !== 'pending'} checked={todo.status === 'done' || selected.includes(todo.id)} onCheckedChange={checked => setSelected(previous => checked ? [...previous, todo.id] : previous.filter(id => id !== todo.id))} /><FieldLabel htmlFor={todo.id}><span className={cn(todo.status !== 'pending' && 'line-through text-muted-foreground')}>{todo.title}</span></FieldLabel></Field>
+          {todo.stage && <Badge variant="outline">{humanize(todo.stage)}</Badge>}{todo.status === 'pending' ? <Button variant="ghost" size="sm" disabled={busy} aria-label={`Complete ${todo.title}`} onClick={() => apply([{ type: 'todo.complete', todoIds: [todo.id] }])}>Complete</Button> : <Button variant="ghost" size="sm" disabled={busy} onClick={() => apply([{ type: 'todo.update', todoId: todo.id, status: 'pending' }])}>Reopen</Button>}
+        </div>)}</div></FieldSet>}
+      </TabsContent>
+      <TabsContent value="findings" className="pt-6"><div className="section-heading"><div><h2>Review findings</h2><p>Keep feedback attached to the work.</p></div><Button variant="outline" onClick={() => openDialog('finding')}><Plus data-icon="inline-start" />Add finding</Button></div>
+        {task.findings.length === 0 ? <Empty><EmptyHeader><EmptyMedia variant="icon"><ShieldAlert /></EmptyMedia><EmptyTitle>No findings recorded</EmptyTitle><EmptyDescription>Agent and human review findings will appear here.</EmptyDescription></EmptyHeader></Empty> : <div className="flex flex-col gap-4">{task.findings.map(item => <article className="finding" key={item.id}><div className="flex items-center justify-between gap-3"><div className="flex gap-2"><Badge variant={item.severity === 'high' || item.severity === 'critical' ? 'destructive' : 'secondary'}>{humanize(item.severity)}</Badge><Badge variant="outline">{humanize(item.status)}</Badge></div>{item.status === 'open' && <Button variant="outline" size="sm" onClick={() => openDialog(item.id)}>Resolve</Button>}</div><Prose>{item.description}</Prose>{item.file && <code className="text-xs text-muted-foreground break-all">{item.file}{item.line ? `:${item.line}` : ''}</code>}{item.resolution && <div className="resolution"><Prose>{item.resolution}</Prose></div>}</article>)}</div>}
+      </TabsContent>
+      <TabsContent value="notes" className="pt-6"><div className="section-heading"><div><h2>Progress notes</h2><p>Decisions, discoveries, and handoffs.</p></div><Button variant="outline" onClick={() => openDialog('note')}><Plus data-icon="inline-start" />Add note</Button></div>{task.notes.length === 0 ? <Empty><EmptyHeader><EmptyMedia variant="icon"><MessageSquare /></EmptyMedia><EmptyTitle>No notes yet</EmptyTitle><EmptyDescription>Capture context for whoever picks up this task next.</EmptyDescription></EmptyHeader></Empty> : <div className="flex flex-col gap-6">{[...task.notes].reverse().map(note => <article className="note" key={note.id}><span className="text-xs text-muted-foreground">{timeAgo(note.createdAt)}</span><Prose>{note.text}</Prose></article>)}</div>}</TabsContent>
+      <TabsContent value="history" className="pt-6"><div className="section-heading"><div><h2>Task activity</h2><p>A durable record of changes.</p></div></div><div className="flex flex-col gap-5">{[...task.history].reverse().slice(0, historyCount).map(event => <div key={event.id} className="flex items-start gap-3"><GitCommitHorizontal className="size-5 text-muted-foreground shrink-0" /><div className="flex flex-col gap-1"><span className="text-xs text-muted-foreground">Revision {event.revision} · {timeAgo(event.at)}</span>{event.changes.map((change, i) => <p key={i}>{change}</p>)}</div></div>)}</div>{task.history.length > historyCount && <Button className="mt-6" variant="outline" onClick={() => setHistoryCount(count => count + 20)}>Show more activity</Button>}</TabsContent>
+    </Tabs>
+    {dialog === 'edit' && <EditDialog title="Edit task brief" description="Give agents a clear goal and useful context." fields={[{ name: 'title', label: 'Task name', initial: task.title, required: true }, { name: 'description', label: 'Description · Markdown supported', multiline: true, initial: task.description }]} onClose={() => setDialog(null)} onSubmit={values => mutate([{ type: 'title.set', title: values.title! }, { type: 'description.set', description: values.description! }], draftRevision)} />}
+    {dialog === 'todo' && <EditDialog title="Add todos" description="One actionable step per line. All steps are added together." fields={[{ name: 'todos', label: 'Todos', multiline: true, required: true, placeholder: 'Implement the endpoint\nAdd integration tests' }, { name: 'stage', label: 'Stage', choices: stages, initial: task.stage }]} submitLabel="Add todos" onClose={() => setDialog(null)} onSubmit={values => mutate(values.todos!.split('\n').map(title => title.trim()).filter(Boolean).map(title => ({ type: 'todo.add', title, stage: values.stage as typeof task.stage })), draftRevision)} />}
+    {dialog === 'block' && <EditDialog title="Mark task as blocked" description="Explain what needs to happen before work can continue." fields={[{ name: 'reason', label: 'Blocker', multiline: true, required: true }]} onClose={() => setDialog(null)} onSubmit={values => mutate([{ type: 'status.set', status: 'blocked', reason: values.reason }], draftRevision)} />}
+    {dialog === 'finding' && <EditDialog title="Record a finding" description="Document the issue so an agent can act on it." fields={[{ name: 'description', label: 'Finding', multiline: true, required: true }, { name: 'severity', label: 'Severity', choices: ['low', 'medium', 'high', 'critical'], initial: 'medium' }, { name: 'file', label: 'File (optional)', placeholder: 'src/auth/reset.ts' }, { name: 'line', label: 'Line (optional)', placeholder: '42' }]} submitLabel="Add finding" onClose={() => setDialog(null)} onSubmit={values => mutate([{ type: 'finding.add', description: values.description!, severity: values.severity as 'medium', ...(values.file ? { file: values.file } : {}), ...(values.line ? { line: Number(values.line) } : {}) }], draftRevision)} />}
+    {finding && <EditDialog title="Resolve finding" description="Record how this finding was handled." fields={[{ name: 'status', label: 'Resolution', choices: ['resolved', 'dismissed'] }, { name: 'resolution', label: 'Explanation', multiline: true, required: true }]} onClose={() => setDialog(null)} onSubmit={values => mutate([{ type: 'finding.resolve', findingId: finding.id, status: values.status as 'resolved', resolution: values.resolution! }], draftRevision)} />}
+    {dialog === 'note' && <EditDialog title="Add progress note" description="Capture useful context, decisions, or verification results." fields={[{ name: 'text', label: 'Note · Markdown supported', multiline: true, required: true }]} submitLabel="Add note" onClose={() => setDialog(null)} onSubmit={values => mutate([{ type: 'note.add', text: values.text! }], draftRevision)} />}
+  </section>
+}

@@ -1,0 +1,78 @@
+{
+  "schemaVersion": 1,
+  "id": "A3vi4CDaaxQKMCiHUs_BV",
+  "title": "Improve SDS CLI batching, compact output, and storage errors",
+  "description": "Implement compact mutation responses with verbose opt-in, batch task reads, cross-task updates with explicit per-task outcomes and preserved revision checks, and actionable state-directory permission errors. Keep operations shared in core and verify CLI/MCP/HTTP contracts.",
+  "stage": "reviewing",
+  "status": "done",
+  "revision": 3,
+  "createdAt": "2026-09-09T05:50:28.753Z",
+  "updatedAt": "2026-09-09T05:57:06.102Z",
+  "todos": [
+    {
+      "id": "98N_lNDAR6ms1UZ481DsJ",
+      "title": "Implement shared batch operations and compact mutation summaries",
+      "status": "done",
+      "stage": "implementing"
+    },
+    {
+      "id": "QevPJUOYvIf_MOhY3wP-w",
+      "title": "Expose batch reads and updates through CLI and adapters",
+      "status": "done",
+      "stage": "implementing"
+    },
+    {
+      "id": "qrVvwbT6hQjqZnS5Ime9s",
+      "title": "Improve storage permission diagnostics",
+      "status": "done",
+      "stage": "implementing"
+    },
+    {
+      "id": "FkfJnbrH0kxbhauSoArSb",
+      "title": "Test mixed batch outcomes and run required build checks",
+      "status": "done",
+      "stage": "reviewing"
+    }
+  ],
+  "findings": [],
+  "notes": [
+    {
+      "id": "TJbE4YlE4kVk84UYUJeBc",
+      "text": "Implemented compact mutation receipts with verbose opt-in, schema-validated ordered batch reads/updates shared across CLI/MCP/HTTP, per-task revision checks and outcomes, and actionable state-directory errors. No automatic retries or cross-task atomicity. Verified 22 tests / 174 assertions and bun run build; only existing Vite bundle-size warning.",
+      "createdAt": "2026-09-09T05:57:06.102Z"
+    }
+  ],
+  "history": [
+    {
+      "id": "CkWBqkDa1YOXa2vkDrGa7",
+      "revision": 1,
+      "at": "2026-09-09T05:50:28.753Z",
+      "changes": [
+        "Task created"
+      ]
+    },
+    {
+      "id": "S6obifYe07o7U9iyitZ3Z",
+      "revision": 2,
+      "at": "2026-09-09T05:53:46.507Z",
+      "changes": [
+        "Stage: implementing",
+        "Status: active"
+      ]
+    },
+    {
+      "id": "Ik6uQbmebq2dOP4z9jbbs",
+      "revision": 3,
+      "at": "2026-09-09T05:57:06.102Z",
+      "changes": [
+        "Todo completed: Implement shared batch operations and compact mutation summaries",
+        "Todo completed: Expose batch reads and updates through CLI and adapters",
+        "Todo completed: Improve storage permission diagnostics",
+        "Todo completed: Test mixed batch outcomes and run required build checks",
+        "Stage: reviewing",
+        "Progress note added",
+        "Status: done"
+      ]
+    }
+  ]
+}
