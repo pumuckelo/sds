@@ -1,0 +1,70 @@
+name: Release
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-14
+            platform: darwin-arm64
+          - runner: macos-15-intel
+            platform: darwin-x64
+          - runner: ubuntu-22.04
+            platform: linux-x64
+          - runner: ubuntu-24.04-arm
+            platform: linux-arm64
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.7
+      - run: bun install --frozen-lockfile
+      - name: Test installer
+        run: python3 scripts/test-install.py
+      - name: Verify release version
+        if: startsWith(github.ref, 'refs/tags/')
+        shell: bash
+        run: |
+          test "$GITHUB_REF_NAME" = "v$(bun -p 'require("./package.json").version')"
+      - name: Test and package
+        run: |
+          bun test
+          sh scripts/package-release.sh "${{ matrix.platform }}"
+      - name: Smoke test binaries
+        run: |
+          release/sds-${{ matrix.platform }}/sds --version
+          release/sds-${{ matrix.platform }}/sds schema update > /dev/null
+          cd release
+          shasum -a 256 sds-${{ matrix.platform }}.tar.gz > sds-${{ matrix.platform }}.tar.gz.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sds-${{ matrix.platform }}
+          path: |
+            release/*.tar.gz
+            release/*.sha256
+  publish:
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+      - name: Bundle standalone installer
+        run: sh scripts/bundle-installer.sh > artifacts/install.sh
+      - name: Publish archives, checksums, and installer
+        # install.sh is uploaded as an asset, not executed here.
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" artifacts/* --verify-tag --generate-notes

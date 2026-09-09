@@ -2,3 +2,5 @@ node_modules/
 dist/
 .sds-local/
 *.log
+
+release/

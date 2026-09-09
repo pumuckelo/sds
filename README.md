@@ -4,14 +4,30 @@ Local, repository-owned task management for agents and humans. Use the **CLI** t
 
 ## Install
 
-Requires Bun. From this repository's root:
+Download prebuilt executables for macOS or Linux (Apple Silicon/ARM64 and x64):
+
+```sh
+curl -fsSL https://github.com/pumuckelo/sds/releases/latest/download/install.sh | sh
+```
+
+This requires a published GitHub Release; the first release becomes available after the release workflow is pushed and a version tag is published. The installer verifies the archive checksum and installs into `~/.local/share/sds` with commands in `~/.local/bin`. Add that directory to your PATH. No Bun or Node is required to run the prebuilt executables.
+
+Run the same command to upgrade. Use `INSTALL_VERSION=vX.Y.Z`, `INSTALL_ROOT`, or `INSTALL_BIN_DIR` on the installer process to select a version or location. The installer does not edit shell profiles or repository instructions.
+
+### Agent setup
+
+The bundled [usage skill](skills/sds/SKILL.md) has a separate [setup reference](skills/sds/references/setup.md). Install the skill in your agent's supported skill directory, then ask it to install and use SDS in your project. Setup guidance covers installation and adding a short note to the project's `AGENTS.md` and `CLAUDE.md` when adopting the tool. Normal usage does not load the setup reference.
+
+For agent-led setup, give your agent the [setup reference](https://github.com/pumuckelo/sds/blob/main/skills/sds/references/setup.md) and ask it to install and use the tool in your repository. It can install the bundled usage skill as part of that setup.
+
+### Build from source
+
+Requires Bun. From this repository:
 
 ```sh
 bun install --frozen-lockfile
 bun link
 ```
-
-Ensure Bun's binary directory is on PATH. Without linking, run `bun /absolute/path/to/sds/src/cli/main.ts` in place of `sds`.
 
 ## Use the CLI
 
@@ -54,12 +70,7 @@ Track development work in SDS. Read the sds skill before using it.
 
 ## Dashboard
 
-Start the optional dashboard from this repository:
-
-```sh
-bun run build
-bun run serve
-```
+With the prebuilt installation, run `sds-dashboard` from any directory. For a source checkout, run `bun run build` and `bun run serve` from this repository.
 
 Open [SDS](http://127.0.0.1:4317/) and register an existing local project folder. Registration initializes `.agent-work/project.json` and `.agent-work/tasks/`. The dashboard supports tasks, recursive subtasks, linked dependencies, checklists, review findings and notes. Kanban is the initial view; your board/hierarchy and system/light/dark choices persist in the browser. Tasks sort active, blocked, queued, done, cancelled, then newest update first. Hierarchy keeps children under their parents.
 
@@ -212,3 +223,20 @@ Example `task_update` arguments:
 Other operations: `dependencies.set`, `parent.set`, `title.set`, `description.set`, `status.set`, `todo.add`, `todo.update`, `finding.add`, and `finding.resolve`. Tool schemas describe each payload. A blocked status requires a reason; finding resolution requires an explanation. A conflict returns an actionable error: retrieve the latest task, reconcile changes, and retry with its revision. A batch either succeeds completely or leaves the task unchanged.
 
 Refresh a running heartbeat every 30 seconds; it expires after 60 seconds. Send `running: false` when finished. Activity is held in server memory and resets on restart. An active task status alone does not mean an agent is running.
+
+## Publishing releases
+
+The GitHub Actions release workflow builds macOS and Linux executables for ARM64 and x64, packages the dashboard and skills, and publishes archives, SHA-256 checksums, and the installer. Manual workflow runs on a branch build downloadable artifacts without publishing a release.
+
+Update the package version, commit and push the changes, then push a matching `vX.Y.Z` tag. The workflow checks the tag against `package.json`. GitHub's built-in token publishes the release; no npm account or separate publishing secret is required. The installer attached to the release is an asset for users, not a command executed by the publish step.
+
+After committing the version and release changes, run from this repository (requires Bun):
+
+```sh
+sh scripts/release.sh tag   # create an annotated tag from the committed package version
+sh scripts/release.sh push  # push only that tag to origin and trigger the release
+```
+
+Tag creation requires a clean checkout. Repeating it is safe when the tag already points to the current commit; an existing tag is never moved. For subsequent releases, bump the package version first. The push command publishes the existing tag, even if your branch has newer commits.
+
+Installer sources live in `scripts/installer/`; `scripts/install.sh` loads them when run from a checkout. `sh scripts/bundle-installer.sh > install.sh` produces the standalone release installer. Edit the source modules, not generated bundles.

@@ -1,0 +1,75 @@
+{
+  "schemaVersion": 1,
+  "id": "1noPiO-6qbA-XOW6PIZjq",
+  "title": "Add GitHub binary releases and installation skills",
+  "description": "Build macOS/Linux release archives for SDS and bridge, checksum installers, setup references and CLI-first release documentation. Validate locally without publishing a release.",
+  "dependencyIds": [],
+  "stage": "reviewing",
+  "status": "done",
+  "revision": 5,
+  "createdAt": "2026-09-09T09:50:21.009Z",
+  "updatedAt": "2026-09-09T10:15:42.243Z",
+  "todos": [],
+  "findings": [],
+  "notes": [
+    {
+      "id": "Z2206oiDvDXw40OfQU9QB",
+      "text": "Implemented four-platform GitHub release workflows, readable checksum-verified installers with upgrade tests, packaged usage skills with setup-only references, and installation-first READMEs for SDS and Editor LSP Bridge. SDS compiled CLI/dashboard smoke tested from an extracted archive outside the source checkout, including symlink asset lookup and offline task creation. Fixed generated SDS IDs being parsed as flags; CLI version now follows package.json. Validation: SDS 31 tests pass and build passes; bridge 8 default tests pass, 3 analyzer-dependent tests remain explicitly ignored; fmt/clippy pass; installer fresh install/upgrade/checksum rejection/file-preservation checks pass for both; skills and workflow YAML validate. macOS ARM64 archives built locally. GitHub multi-platform execution and actual release publication await push/tag.",
+      "createdAt": "2026-09-09T10:00:52.249Z"
+    },
+    {
+      "id": "fFnjIZ1DbbYCX96zORYX3",
+      "text": "Follow-up: split both installer sources into config, platform, download, verify and install shell modules. Repository entry points source those files; release workflows generate a standalone installer bundle and upload it as a release asset. README and setup links now download the release bundle. Tests exercise the source entry point and standalone stdin execution outside the checkout, including upgrades and rejection cases. Both installer suites, shell syntax, workflow YAML and diff checks pass.",
+      "createdAt": "2026-09-09T10:04:36.922Z"
+    },
+    {
+      "id": "xDLoFZzSssebmDY4YWwlc",
+      "text": "Cargo-dist evaluation: Rust and generic custom builds are supported, but its documented shell installer discards archive contents other than binaries (and opt-in libraries); upstream issue 307 remains open. Bridge embeds its dashboard and is compatible for executable installation. SDS dashboard.ts locates an external dist directory beside its executable, so a direct migration would break the dashboard. Both current installers also install skills, and bridge includes optional Zed extension source; cargo-dist would not retain these assets. Recommended migration prerequisite: embed SDS web assets into its executable and install published skills separately through agent setup; distribute optional Zed source separately. No release workflows replaced during this compatibility evaluation. Sources: https://axodotdev.github.io/cargo-dist/book/installers/shell.html and https://axodotdev.github.io/cargo-dist/book/custom-builds.html and https://github.com/axodotdev/cargo-dist/issues/307. This was documentation/source review, not an executed cargo-dist release build.",
+      "createdAt": "2026-09-09T10:15:42.243Z"
+    }
+  ],
+  "history": [
+    {
+      "id": "fc6ygQdgfs0bYLbLXbJO1",
+      "revision": 1,
+      "at": "2026-09-09T09:50:21.009Z",
+      "changes": [
+        "Task created"
+      ]
+    },
+    {
+      "id": "dUnq4ZbmO5g_uYIiQQfaX",
+      "revision": 2,
+      "at": "2026-09-09T09:55:54.226Z",
+      "changes": [
+        "Status: active"
+      ]
+    },
+    {
+      "id": "vw7XNLDpdkyM9FS347ucj",
+      "revision": 3,
+      "at": "2026-09-09T10:00:52.249Z",
+      "changes": [
+        "Progress note added",
+        "Stage: reviewing",
+        "Status: done"
+      ]
+    },
+    {
+      "id": "ICVVgK4dYhlgEqU771DX4",
+      "revision": 4,
+      "at": "2026-09-09T10:04:36.922Z",
+      "changes": [
+        "Progress note added"
+      ]
+    },
+    {
+      "id": "8iB5O15OEkDVysk15zVvs",
+      "revision": 5,
+      "at": "2026-09-09T10:15:42.243Z",
+      "changes": [
+        "Progress note added"
+      ]
+    }
+  ]
+}

@@ -1,4 +1,5 @@
 #!/usr/bin/env bun
+import { version } from '../../package.json'
 import { BunServices } from '@effect/platform-bun'
 import { Console, Effect, Option, Schema } from 'effect'
 import { Argument, Command, Flag } from 'effect/unstable/cli'
@@ -147,7 +148,7 @@ const cli = root.pipe(Command.withSubcommands([init, checkout, Command.make('tas
 // Buffer parser help so failed commands leave stdout empty for agent callers.
 const output: string[] = []
 const cliConsole: Console.Console = { ...console, log: (...args: unknown[]) => { output.push(args.map(String).join(' ')) } }
-await Effect.runPromise(Command.runWith(cli, { version: '0.1.0', renderErrors: false })(process.argv.slice(2)).pipe(
+await Effect.runPromise(Command.runWith(cli, { version, renderErrors: false })(process.argv.slice(2)).pipe(
   Effect.provide(BunServices.layer),
   Effect.provideService(Console.Console, cliConsole),
   Effect.match({

@@ -1,6 +1,6 @@
 import { Context, DateTime, Effect, Layer } from 'effect'
 import { basename, join } from 'node:path'
-import { nanoid } from 'nanoid'
+import { newId } from './ids'
 import * as S from './schema'
 import { hierarchy } from './hierarchy'
 import { Storage, decode, failure, resolveRef, shortRef } from './storage'
@@ -75,14 +75,14 @@ const createService = Effect.gen(function* () {
       const project = yield* storage.lock(projectFile, Effect.gen(function* () {
         const value = yield* storage.read(projectFile)
         if (value !== undefined) return yield* decode(S.Project, value)
-        const project = { schemaVersion: 1 as const, id: nanoid(), name: input.name ?? basename(path) }
+        const project = { schemaVersion: 1 as const, id: newId(), name: input.name ?? basename(path) }
         yield* decode(S.Project, project)
         yield* storage.write(projectFile, project)
         return project
       }))
       const current = yield* registry()
       const previous = current.checkouts.find(item => item.path === path)
-      const entry = { id: previous?.id ?? nanoid(), projectId: project.id, path, name: input.name ?? previous?.name ?? basename(path) }
+      const entry = { id: previous?.id ?? newId(), projectId: project.id, path, name: input.name ?? previous?.name ?? basename(path) }
       yield* storage.write(registryFile, { ...current, checkouts: [...current.checkouts.filter(item => item.path !== path), entry] })
       return { ...entry, projectName: project.name, url: `/checkouts/${entry.id}` }
     }))
@@ -100,12 +100,12 @@ const createService = Effect.gen(function* () {
     const entry = yield* checkout(input.checkoutId)
     return yield* storage.lock(join(entry.path, '.agent-work/tasks'), Effect.gen(function* () {
       const now = yield* timestamp
-      let id = nanoid()
+      let id = newId()
       const ids = new Set((yield* storage.taskFiles(entry.path)).map(file => file.slice(0, -5)))
-      while (ids.has(id)) id = nanoid()
+      while (ids.has(id)) id = newId()
       const parentId = yield* validateParent(entry, id, input.parentId ?? null)
       const dependencyIds = yield* validateDependencies(entry, id, input.dependencyIds ?? [])
-      const task: S.Task = { schemaVersion: 1, id, parentId, dependencyIds, title: input.title, description: input.description ?? '', stage: 'planning', status: 'queued', revision: 1, createdAt: now, updatedAt: now, todos: (input.todos ?? []).map(todo => ({ ...todo, id: nanoid(), status: 'pending' as const })), findings: [], notes: [], history: [{ id: nanoid(), revision: 1, at: now, changes: ['Task created'] }] }
+      const task: S.Task = { schemaVersion: 1, id, parentId, dependencyIds, title: input.title, description: input.description ?? '', stage: 'planning', status: 'queued', revision: 1, createdAt: now, updatedAt: now, todos: (input.todos ?? []).map(todo => ({ ...todo, id: newId(), status: 'pending' as const })), findings: [], notes: [], history: [{ id: newId(), revision: 1, at: now, changes: ['Task created'] }] }
       yield* decode(S.Task, task)
       yield* storage.write(join(entry.path, '.agent-work/tasks', `${id}.json`), task)
       return { id, ref: shortRef(id, [...ids].map(id => ({ id }))), parentId: parentId ?? null, revision: 1, todos: task.todos.map(todo => ({ id: todo.id, ref: shortRef(todo.id, task.todos), ...(input.verbose ? { title: todo.title } : {}) })), url: `/checkouts/${entry.id}/tasks/${id}` }
@@ -166,7 +166,7 @@ const createService = Effect.gen(function* () {
             if (op.status === 'blocked' && !op.reason?.trim()) return yield* failure('INVALID_INPUT', 'A blocked task needs a reason')
             next.status = op.status; next.blocker = op.status === 'blocked' ? op.reason : undefined; changes.push(`Status: ${op.status}`); break
           case 'todo.add': {
-            const todo = { id: nanoid(), title: op.title, stage: op.stage, status: 'pending' as const }
+            const todo = { id: newId(), title: op.title, stage: op.stage, status: 'pending' as const }
             next.todos.push(todo); added.push({ type: 'todo', id: todo.id, ref: '' }); changes.push(`Todo added: ${op.title}`); break
           }
           case 'todo.update': {
@@ -182,7 +182,7 @@ const createService = Effect.gen(function* () {
             }
             break
           case 'finding.add': {
-            const finding = { id: nanoid(), description: op.description, severity: op.severity, file: op.file, line: op.line, status: 'open' as const }
+            const finding = { id: newId(), description: op.description, severity: op.severity, file: op.file, line: op.line, status: 'open' as const }
             next.findings.push(finding); added.push({ type: 'finding', id: finding.id, ref: '' }); changes.push(`Finding added (${op.severity})`); break
           }
           case 'finding.resolve': {
@@ -190,11 +190,11 @@ const createService = Effect.gen(function* () {
             next.findings = next.findings.map(item => item.id === finding.id ? { ...item, status: op.status, resolution: op.resolution } : item)
             changes.push(`Finding ${op.status}: ${finding.id}`); break
           }
-          case 'note.add': next.notes.push({ id: nanoid(), text: op.text, createdAt: now }); changes.push('Progress note added'); break
+          case 'note.add': next.notes.push({ id: newId(), text: op.text, createdAt: now }); changes.push('Progress note added'); break
         }
       }
       next.revision++; next.updatedAt = now
-      next.history.push({ id: nanoid(), revision: next.revision, at: now, changes })
+      next.history.push({ id: newId(), revision: next.revision, at: now, changes })
       yield* decode(S.Task, next)
       yield* storage.write(file, next)
       return { id, parentId: next.parentId ?? null, revision: next.revision, operationCount: input.operations.length, changeCount: changes.length, ...(input.verbose ? { changes } : {}), added: added.map(item => ({ ...item, ref: shortRef(item.id, item.type === 'todo' ? next.todos : next.findings) })) }
